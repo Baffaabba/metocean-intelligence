@@ -11,6 +11,10 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",    # required for Form/File uploads
 
+    # Database
+    "sqlalchemy>=2.0.0",           # ORM for database
+    "psycopg2-binary>=2.9.0",      # PostgreSQL adapter
+
     # Authentication
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
