@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>UTP Metocean Forecasting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #f8fafc;
+      --surface:      #ffffff;
+      --border:       #e2e8f0;
+      --border-focus: #0ea5e9;
+      --text:         #0f172a;
+      --muted:        #64748b;
+      --accent:       #0ea5e9;
+      --accent-dk:    #0284c7;
+      --accent-lt:    rgba(14,165,233,0.08);
+      --danger:       #ef4444;
+      --danger-lt:    #fef2f2;
+      --warn:         #f59e0b;
+      --success:      #10b981;
+      --mono:         'IBM Plex Mono', monospace;
+      --sans:         'IBM Plex Sans', sans-serif;
+      --radius:       10px;
+      --shadow:       0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────────── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(248,250,252,0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      min-height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem;
+    }
+    .logo-block {
+      display: flex; flex-direction: column; gap: 0.1rem;
+    }
+    .logo {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      line-height: 1;
+    }
+    .logo span { color: var(--accent); }
+    .logo-sub {
+      font-family: var(--sans);
+      font-size: 0.68rem;
+      font-weight: 400;
+      color: var(--muted);
+      opacity: 0.75;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 540px;
+    }
+    .header-status {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+    .dot.online { background: var(--success); animation: pulse-dot 2s ease-in-out infinite; }
+    .dot.error  { background: var(--danger); }
+
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; } 50% { opacity:0.4; }
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+    main {
+      position: relative; z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem 4rem;
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.75rem;
+      margin-bottom: 1.25rem;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.4s ease forwards;
+    }
+    .section:nth-child(1) { animation-delay: 0.05s; }
+    .section:nth-child(2) { animation-delay: 0.12s; }
+    .section:nth-child(3) { animation-delay: 0.19s; }
+
+    .section-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+    .section-num {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+    }
+    .section-title {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    /* ── Tabs ─────────────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.25rem;
+    }
+    .tab-btn {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: none; border: none; cursor: pointer;
+      padding: 0.5rem 0.85rem;
+      color: var(--muted);
+      position: relative;
+      transition: color 0.2s;
+    }
+    .tab-btn::after {
+      content: '';
+      position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 2px; background: var(--accent);
+      transform: scaleX(0);
+      transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    }
+    .tab-btn.active { color: var(--accent); }
+    .tab-btn.active::after { transform: scaleX(1); }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Form fields ──────────────────────────────────────────────────────── */
+    .field { margin-bottom: 1.1rem; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
+
+    label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.38rem;
+    }
+    .label-hint {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      font-weight: 300;
+      margin-left: 0.4rem;
+      opacity: 0.7;
+    }
+
+    select, input[type="text"] {
+      width: 100%; height: 38px;
+      padding: 0 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      padding-right: 2rem;
+    }
+    select:focus, input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.1);
+      transform: translateY(-1px);
+    }
+
+    /* ── Slider ───────────────────────────────────────────────────────────── */
+    .slider-wrap { display: flex; align-items: center; gap: 0.75rem; }
+    input[type="range"] {
+      flex: 1; height: 4px;
+      -webkit-appearance: none; appearance: none;
+      background: var(--border);
+      border-radius: 2px; outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--surface);
+      box-shadow: 0 0 0 1px var(--accent);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+    .slider-val {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--accent);
+      min-width: 2.5rem;
+      text-align: right;
+    }
+    .field-hint {
+      font-size: 0.7rem; color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ── Upload zone ──────────────────────────────────────────────────────── */
+    .upload-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-lt);
+    }
+    .upload-icon { font-size: 1.5rem; color: var(--muted); margin-bottom: 0.4rem; }
+    .upload-label { font-size: 0.82rem; color: var(--muted); }
+    .upload-label strong { color: var(--accent); }
+
+    /* ── Skeleton loader for dropdowns ───────────────────────────────────── */
+    .skeleton {
+      height: 38px; border-radius: 7px;
+      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ── Submit button ────────────────────────────────────────────────────── */
+    .btn-primary {
+      height: 42px; padding: 0 1.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none; border-radius: 7px;
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .btn-primary:hover {
+      background: var(--accent-dk);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(14,165,233,0.3);
+    }
+    .btn-primary:active { transform: translateY(0); box-shadow: none; }
+    .btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .btn-primary.loading .btn-text { display: none; }
+    .btn-primary.loading .spinner { display: block; }
+
+    /* ── Error/Alert box ──────────────────────────────────────────────────── */
+    .alert {
+      display: none;
+      padding: 0.75rem 1rem;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+      animation: fadeUp 0.25s ease forwards;
+    }
+    .alert.visible { display: flex; align-items: flex-start; gap: 0.5rem; }
+    .alert.error   { background: var(--danger-lt); border: 1px solid #fecaca; color: #b91c1c; }
+    .alert.warn    { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .alert.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .alert-icon { font-size: 1rem; flex-shrink: 0; line-height: 1.4; }
+
+    /* ── Results ──────────────────────────────────────────────────────────── */
+    .results-section {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .results-section.visible {
+      display: block;
+      animation: fadeUp 0.35s ease forwards;
+    }
+
+    .inference-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.2rem 0.6rem;
+      margin-bottom: 1rem;
+    }
+
+    .plot-container { width: 100%; min-height: 380px; border-radius: 8px; overflow: hidden; }
+
+    /* ── Table ────────────────────────────────────────────────────────────── */
+    .table-wrap {
+      margin-top: 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .table-title {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .table-download {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      cursor: pointer;
+      background: none; border: none;
+      transition: opacity 0.15s;
+    }
+    .table-download:hover { opacity: 0.7; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    thead th {
+      font-family: var(--mono);
+      font-size: 0.67rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 0.55rem 0.9rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      transition: background 0.12s;
+    }
+    tbody tr:hover { background: var(--accent-lt); }
+    tbody td {
+      padding: 0.5rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Toast ────────────────────────────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: var(--text); color: #fff;
+      font-family: var(--mono); font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      opacity: 0; transform: translateY(6px);
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none; z-index: 9999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Animations ───────────────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Loading overlay ─────────────────────────────────────────────────── */
+    @keyframes spin-overlay { to { transform: rotate(360deg); } }
+    .loading-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; align-items:center; justify-content:center; }
+    .loading-overlay.active { display:flex; }
+    .loading-box { background:var(--surface); border-radius:12px; padding:2rem 2.5rem; max-width:360px; width:90%; text-align:center; box-shadow:0 8px 40px rgba(0,0,0,0.18); }
+    .loading-spinner-ring { width:52px; height:52px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin-overlay 0.8s linear infinite; margin:0 auto 1rem; }
+    .loading-title { font-family:var(--mono); font-size:0.8rem; font-weight:500; color:var(--text); margin-bottom:0.4rem; }
+    .loading-msg { font-size:0.75rem; color:var(--muted); margin-bottom:1rem; }
+    .loading-bar-track { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .loading-bar-fill { height:100%; background:var(--accent); border-radius:2px; width:0%; transition:width 0.4s ease; }
+
+    /* ── Docs section ─────────────────────────────────────────────────────── */
+    .docs-content { padding:1.2rem 0; font-size:0.82rem; line-height:1.7; color:var(--muted); }
+    .docs-content h4 { font-size:0.78rem; font-family:var(--mono); color:var(--text); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.04em; }
+    .docs-content p { margin-bottom:0.8rem; }
+    .model-cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1rem; margin-top:1rem; }
+    .model-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem 1.1rem; }
+    .model-card-name { font-family:var(--mono); font-size:0.75rem; font-weight:500; color:var(--accent); margin-bottom:0.4rem; }
+    .model-card-desc { font-size:0.74rem; color:var(--muted); line-height:1.6; }
+  </style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-box">
+    <div class="loading-spinner-ring"></div>
+    <p class="loading-title" id="loading-title">Processing…</p>
+    <p class="loading-msg" id="loading-msg">This may take a moment</p>
+    <div class="loading-bar-track"><div class="loading-bar-fill" id="loading-bar"></div></div>
+  </div>
+</div>
+
+<header>
+  <div style="display:flex;align-items:center;gap:0.75rem;">
+    <img src="/assets/images/UTP-Full-removebg-preview.png" alt="UTP" style="height:32px;opacity:0.9;">
+    <div class="logo-block">
+      <p class="logo"><span>MetOcean</span> Intelligence Platform</p>
+      <p class="logo-sub">Integration of Metocean Data for Intelligent Operations</p>
+    </div>
+  </div>
+  <div class="header-status">
+    <span class="dot" id="api-dot"></span>
+    <span id="api-status">connecting…</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Section 1: Data Source ─────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">Data Source</span>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-target="panel_dataset">Dataset</button>
+      <button class="tab-btn" data-target="panel_upload">Upload CSV</button>
+      <button class="tab-btn" data-target="panel_url">From URL</button>
+    </div>
+
+    <div class="tab-panel active" id="panel_dataset">
+      <div class="field">
+        <label for="dataset">Built-in Dataset</label>
+        <div id="dataset-skeleton" class="skeleton"></div>
+        <select id="dataset" style="display:none"></select>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel_upload">
+      <div class="upload-zone" id="upload-zone" tabindex="0">
+        <div class="upload-icon">↑</div>
+        <p class="upload-label"><strong>Click to browse</strong> or drag & drop a CSV</p>
+        <p id="upload-filename" class="field-hint" style="margin-top:0.4rem"></p>
+        <a id="change-file-link" style="display:none;font-size:0.72rem;color:var(--accent);cursor:pointer;font-family:var(--mono);margin-top:0.3rem;text-decoration:underline;">↺ Change file</a>
+      </div>
+      <input type="file" id="csv-file" accept=".csv" style="display:none">
+      <div id="column-select" class="field-row" style="margin-top:1rem; display:none">
+        <div class="field">
+          <label for="timestamp-col">Timestamp Column <span class="label-hint">(ds)</span></label>
+          <select id="timestamp-col"></select>
+        </div>
+        <div class="field">
+          <label for="value-col">Value Column <span class="label-hint">(y)</span></label>
+          <select id="value-col"></select>
+        </div>
+        <div class="field">
+          <label for="id-col">ID / Group Column <span class="label-hint">(optional)</span></label>
+          <select id="id-col"><option value="">— None (single series) —</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel_url">
+      <div class="field">
+        <label for="csv-url">Public CSV URL</label>
+        <input type="text" id="csv-url" placeholder="https://raw.githubusercontent.com/…/data.csv">
+        <p class="field-hint">Raw CSV link. First two columns used unless dataset has ds/y headers.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 2: Configuration ──────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">Configuration</span>
+    </div>
+
+    <div id="forecast-alert" class="alert error">
+      <span class="alert-icon">⚠</span>
+      <span id="forecast-alert-msg"></span>
+    </div>
+
+    <div class="field">
+      <label for="model">Forecasting Model</label>
+      <div id="model-skeleton" class="skeleton"></div>
+      <select id="model" style="display:none"></select>
+    </div>
+
+    <div class="field">
+      <label>Forecast Horizon <span class="label-hint">(fh)</span></label>
+      <div class="slider-wrap">
+        <input type="range" id="forecast-slider" min="1" max="100" value="18">
+        <span class="slider-val" id="slider-value">18</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Fine-tuning Steps <span class="label-hint">(max_steps)</span></label>
+      <div class="slider-wrap">
+        <input type="range" id="nshot-range" min="0" max="100" value="0">
+        <span class="slider-val" id="nshot-value">0</span>
+      </div>
+      <p class="field-hint">0 = zero-shot inference (fastest). Increase to fine-tune on your data.</p>
+    </div>
+
+    <button class="btn-primary" id="btn-forecast" type="button">
+      <span class="btn-text">▶ Run Forecast</span>
+      <span class="spinner"></span>
+    </button>
+  </section>
+
+  <!-- ── Forecast Results ───────────────────────────────────────────────── -->
+  <section class="results-section" id="results-forecast">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">Forecast Results</span>
+    </div>
+    <span class="inference-badge" id="inference-time">⏱ —</span>
+    <div class="plot-container" id="forecast-plot"></div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <span class="table-title">Forecast Data</span>
+        <button class="table-download" id="dl-forecast">↓ CSV</button>
+      </div>
+      <div style="overflow-x:auto;max-height:16rem;overflow-y:auto">
+        <table>
+          <thead><tr>
+            <th>ID</th><th>Timestamp</th><th>Forecast</th><th>Lo 90%</th><th>Hi 90%</th>
+          </tr></thead>
+          <tbody id="forecast-table-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem">Run a forecast to see results.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CV Results ─────────────────────────────────────────────────────── -->
+  <section class="results-section" id="results-cv">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">Cross-Validation</span>
+    </div>
+    <div class="field">
+      <label>Cross-Validation Windows <span class="label-hint">(cv_windows)</span></label>
+      <div class="slider-wrap">
+        <input type="range" id="cvWindow" min="0" max="10" value="1">
+        <span class="slider-val" id="cvWindowVal">1</span>
+      </div>
+      <p class="field-hint">Adjust to re-run cross-validation. Set 0 to skip.</p>
+    </div>
+    <div class="plot-container" id="cv-plot"></div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <span class="table-title">Evaluation Metrics</span>
+        <button class="table-download" id="dl-metrics">↓ CSV</button>
+      </div>
+      <div style="overflow-x:auto;max-height:16rem;overflow-y:auto">
+        <table>
+          <thead><tr>
+            <th>Window</th><th>MAE</th><th>MAPE</th><th>RMSE</th><th>sMAPE</th>
+          </tr></thead>
+          <tbody id="cv-table-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem">Run a forecast with CV Windows > 0.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 05: Documentation ──────────────────────────────────────── -->
+  <section class="section" id="docs-section">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <span class="section-title">Documentation</span>
+    </div>
+    <div class="tab-bar docs-tab-bar">
+      <button class="tab-btn docs-tab active" data-docs-target="docs-tl">Transfer Learning</button>
+      <button class="tab-btn docs-tab" data-docs-target="docs-model">Model Cards</button>
+      <button class="tab-btn docs-tab" data-docs-target="docs-ref">References</button>
+    </div>
+    <div id="docs-tl" class="docs-content" style="display:block">
+      <h4>Transfer Learning for Time Series Forecasting</h4>
+      <p>This platform uses pretrained N-HiTS and N-BEATS models trained on the M4 competition dataset. These models learn universal time-series patterns and can be applied zero-shot to new domains.</p>
+      <p>Setting <strong>Fine-Tuning Steps &gt; 0</strong> adapts the pretrained weights to your specific data using a few gradient steps, improving accuracy at the cost of additional computation time.</p>
+      <h4>Zero-Shot Inference</h4>
+      <p>When Fine-Tuning Steps = 0, the model runs in pure transfer-learning mode — no training on your data. This is the fastest option and works well when your data shares characteristics with M4 training data.</p>
+    </div>
+    <div id="docs-model" class="docs-content" style="display:none">
+      <h4>Model Description</h4>
+      <label for="model-card-selection" style="font-size:0.78rem;font-family:var(--mono);color:var(--muted);">Select a model to see its description</label><br>
+      <select id="model-card-selection" style="font-family:var(--mono);font-size:0.75rem;border:1px solid var(--border);border-radius:6px;padding:0.35rem 0.6rem;margin-top:0.5rem;margin-bottom:1.2rem;width:100%;max-width:440px;background:var(--bg);color:var(--text);"></select>
+      <div id="model-card-display"></div>
+    </div>
+    <div id="docs-ref" class="docs-content" style="display:none">
+      <h4>References</h4>
+      <p>Challu, C., et al. (2022). <em>N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting.</em> AAAI 2023.</p>
+      <p>Oreshkin, B. N., et al. (2019). <em>N-BEATS: Neural basis expansion analysis for interpretable time series forecasting.</em> ICLR 2020.</p>
+      <p>Makridakis, S., et al. (2018). <em>The M4 Competition: Results, findings, conclusion and way forward.</em> International Journal of Forecasting.</p>
+      <p>Olivares, K. G., et al. (2022). <em>NeuralForecast: User friendly state-of-the-art neural forecasting models.</em> PyCon Salt Lake City, Utah, US.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Utility: debounce ────────────────────────────────────────────────────────
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// ── Utility: loading overlay ───────────────────────────────────────────────
+let _loadingTimer = null;
+function showLoading(title = 'Processing…', msg = 'This may take a moment') {
+  document.getElementById('loading-title').textContent = title;
+  document.getElementById('loading-msg').textContent = msg;
+  const bar = document.getElementById('loading-bar');
+  bar.style.width = '0%';
+  document.getElementById('loading-overlay').classList.add('active');
+  // fake progress
+  let pct = 0;
+  _loadingTimer = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 8, 85);
+    bar.style.width = pct + '%';
+  }, 400);
+}
+function hideLoading() {
+  clearInterval(_loadingTimer);
+  const bar = document.getElementById('loading-bar');
+  bar.style.width = '100%';
+  setTimeout(() => { document.getElementById('loading-overlay').classList.remove('active'); bar.style.width = '0%'; }, 300);
+}
+
+// ── Utility: URL validation ────────────────────────────────────────────────
+function isValidUrl(str) {
+  try { const u = new URL(str); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; }
+}
+
+// ── Model cards store ──────────────────────────────────────────────────
+let _modelCardsData = {};
+function updateModelCard(modelName) {
+  const card = _modelCardsData[modelName] || {};
+  const display = document.getElementById('model-card-display');
+  if (!display) return;
+  display.innerHTML =
+    '<div class="docs-content">' +
+    '<h4>Abstract</h4><p>' + (card.Abstract || 'N/A') + '</p>' +
+    '<h4>Intended use</h4><p>' + (card['Intended use'] || 'N/A') + '</p>' +
+    '<h4>Limitations</h4><p>' + (card.Limitations || 'N/A') + '</p>' +
+    '<h4>Training data</h4><p>' + (card['Training data'] || 'N/A') + '</p>' +
+    '<h4>Citation Info</h4><pre style="background:var(--bg);padding:0.75rem;border-radius:6px;font-size:0.7rem;white-space:pre-wrap;overflow-x:auto;border:1px solid var(--border);">' + (card['Citation Info'] || 'N/A') + '</pre>' +
+    '</div>';
+}
+
+// ── Config ─────────────────────────────────────────────────────────────────────
+// Use relative paths for robust Nginx proxying (works with any domain/IP)
+const API_BASE = window.location.origin.includes('file://')
+  ? 'http://localhost:8000'
+  : '';  // Empty string = use relative paths (current origin)
+
+// ── Auth ───────────────────────────────────────────────────────────────────────────
+const TOKEN_KEY = 'metocean_token';
+const getToken  = () => localStorage.getItem(TOKEN_KEY);
+
+async function authFetch(path, opts = {}) {
+  const token = getToken();
+  if (!token) { window.location.href = '/'; return; }
+  opts.headers = { ...(opts.headers || {}), 'Authorization': 'Bearer ' + token };
+  // Use relative path: '/api/forecast/' instead of 'http://34.227.227.14/api/forecast/'
+  const r = await fetch(path, opts);
+  if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.href = '/'; return; }
+  return r;
+}
+
+async function verifySession() {
+  const token = getToken();
+  if (!token) { window.location.href = '/'; return false; }
+  try {
+    // Use relative path for auth verification
+    const r = await fetch('/api/auth/verify', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) { localStorage.removeItem(TOKEN_KEY); window.location.href = '/'; return false; }
+    return true;
+  } catch { return false; }
+}
+
+function injectLogoutButton() {
+  const el = document.querySelector('.header-status');
+  if (!el || document.getElementById('logout-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'logout-btn';
+  btn.textContent = 'Logout';
+  btn.style.cssText = 'margin-left:1rem;font-size:0.65rem;cursor:pointer;font-family:var(--mono);color:var(--muted);background:none;border:1px solid var(--border);padding:0.2rem 0.5rem;border-radius:4px;';
+  btn.onclick = () => { localStorage.removeItem(TOKEN_KEY); window.location.href = '/'; };
+  el.appendChild(btn);
+}
+
+// ── Utility: toast ─────────────────────────────────────────────────────────────
+function toast(msg, duration = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ── Utility: show inline error ────────────────────────────────────────────────
+function showAlert(msg, type = 'error') {
+  const box = document.getElementById('forecast-alert');
+  document.getElementById('forecast-alert-msg').textContent = msg;
+  box.className = `alert ${type} visible`;
+}
+function clearAlert() {
+  const box = document.getElementById('forecast-alert');
+  box.classList.remove('visible');
+}
+
+// ── API status check ──────────────────────────────────────────────────────────
+async function checkApiStatus() {
+  const dot = document.getElementById('api-dot');
+  const label = document.getElementById('api-status');
+  try {
+    // Use relative path for health check
+    const r = await fetch('/health', { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const d = await r.json();
+      dot.className = 'dot online';
+      label.textContent = `api · ${d.models_loaded} models`;
+    } else {
+      throw new Error('non-ok');
+    }
+  } catch {
+    dot.className = 'dot error';
+    label.textContent = 'api offline';
+  }
+}
+
+// ── Fetch models from backend ─────────────────────────────────────────────────
+async function loadModels() {
+  const skeleton = document.getElementById('model-skeleton');
+  const select   = document.getElementById('model');
+  try {
+    const r = await authFetch('/api/models');
+    if (!r.ok) throw new Error('Failed to fetch models');
+    const data = await r.json();
+    const models = data.models || [];
+    const modelCards = data.model_cards || {};
+    _modelCardsData = modelCards;
+    select.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+    skeleton.style.display = 'none';
+    select.style.display = '';
+    // populate model card selection dropdown
+    const cardSel = document.getElementById('model-card-selection');
+    if (cardSel && models.length) {
+      cardSel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+      cardSel.addEventListener('change', e => updateModelCard(e.target.value));
+      updateModelCard(cardSel.value);
+    }
+  } catch {
+    skeleton.style.display = 'none';
+    select.innerHTML = `
+      <option value="Pretrained N-HiTS M4 Hourly">Pretrained N-HiTS M4 Hourly</option>
+      <option value="Pretrained N-HiTS M4 Daily">Pretrained N-HiTS M4 Daily</option>
+      <option value="Pretrained N-HiTS M4 Monthly">Pretrained N-HiTS M4 Monthly</option>
+      <option value="Pretrained N-BEATS M4 Hourly">Pretrained N-BEATS M4 Hourly</option>
+    `;
+    select.style.display = '';
+    showAlert('Could not load models from API — using defaults. Is the backend running?', 'warn');
+  }
+}
+
+// ── Fetch datasets from backend ───────────────────────────────────────────────
+async function loadDatasets() {
+  const skeleton = document.getElementById('dataset-skeleton');
+  const select   = document.getElementById('dataset');
+  try {
+    const r = await authFetch('/api/datasets');
+    if (!r.ok) throw new Error('Failed to fetch datasets');
+    const { datasets } = await r.json();
+    select.innerHTML = datasets.map(d => `<option value="${d}">${d}</option>`).join('');
+    skeleton.style.display = 'none';
+    select.style.display = '';
+  } catch {
+    skeleton.style.display = 'none';
+    select.innerHTML = `
+      <option>Electricity (Ercot COAST)</option>
+      <option>Web Traffic (Peyton Manning)</option>
+      <option>Demand (AirPassengers)</option>
+      <option>Finance (Exchange USD-EUR)</option>
+    `;
+    select.style.display = '';
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await verifySession();
+  injectLogoutButton();
+  checkApiStatus();
+  loadModels();
+  loadDatasets();
+})();
+
+// ── Tabs (data source) ────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn:not(.docs-tab)').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn:not(.docs-tab)').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+    document.getElementById('column-select').style.display =
+      btn.dataset.target === 'panel_upload' ? 'grid' : 'none';
+  });
+});
+
+// ── Docs tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.docs-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.docs-tab').forEach(b => b.classList.remove('active'));
+    ['docs-tl', 'docs-model', 'docs-ref'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.docsTarget).style.display = 'block';
+  });
+});
+
+// ── File upload ───────────────────────────────────────────────────────────────
+const zone     = document.getElementById('upload-zone');
+const fileInput = document.getElementById('csv-file');
+
+zone.addEventListener('click', () => fileInput.click());
+zone.addEventListener('keydown', e => e.key === 'Enter' && fileInput.click());
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  if (!file.name.endsWith('.csv')) { showAlert('Only CSV files are supported.'); return; }
+  document.getElementById('upload-filename').textContent = file.name;
+  const changeLink = document.getElementById('change-file-link');
+  changeLink.style.display = 'inline';
+  changeLink.onclick = () => fileInput.click();
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const cols = ev.target.result.split(/\r?\n/)[0].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    ['timestamp-col', 'value-col'].forEach((id, i) => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = cols.map((c, j) => `<option value="${c}" ${j===i?'selected':''}>${c}</option>`).join('');
+    });
+    // populate id-col with blank first then all columns
+    const idSel = document.getElementById('id-col');
+    idSel.innerHTML = '<option value="">\u2014 None (single series) \u2014</option>' +
+      cols.map(c => `<option value="${c}">${c}</option>`).join('');
+    document.getElementById('column-select').style.display = 'grid';
+  };
+  reader.readAsText(file);
+}
+
+// ── Sliders ───────────────────────────────────────────────────────────────────
+[['forecast-slider','slider-value'], ['nshot-range','nshot-value'], ['cvWindow','cvWindowVal']]
+  .forEach(([rid, vid]) => {
+    document.getElementById(rid).addEventListener('input', e => {
+      document.getElementById(vid).textContent = e.target.value;
+    });
+  });
+
+// ── CV slider: re-run forecast when changed ───────────────────────────────────
+document.getElementById('cvWindow').addEventListener('input', debounce(() => {
+  const isForecastVisible = !document.getElementById('results-forecast').classList.contains('hidden');
+  const hasResults = document.getElementById('forecast-table-body').querySelector('tr:not(:has(*))')?.textContent.includes('Run a forecast') === false;
+  if (!isForecasting && isForecastVisible && hasResults) {
+    runForecast();
+  }
+}, 500));
+
+// ── State management ─────────────────────────────────────────────────────────────
+let isForecasting = false;
+
+// ── Tables ────────────────────────────────────────────────────────────────────
+let _forecastData = [], _metricsData = [];
+
+function renderForecastTable(data) {
+  _forecastData = data;
+  const tb = document.getElementById('forecast-table-body');
+  if (!data || !data.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem">No forecast data.</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.unique_id ?? '—'}</td>
+      <td>${r.ds ? new Date(r.ds).toLocaleString() : '—'}</td>
+      <td>${r.forecast != null ? r.forecast.toFixed(4) : '—'}</td>
+      <td>${r.forecast_lo_90 != null ? r.forecast_lo_90.toFixed(4) : '—'}</td>
+      <td>${r.forecast_hi_90 != null ? r.forecast_hi_90.toFixed(4) : '—'}</td>
+    </tr>`).join('');
+}
+
+function renderCvTable(data) {
+  _metricsData = data;
+  const tb = document.getElementById('cv-table-body');
+  if (!data || !data.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1.5rem">No CV data available.</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.window ?? '—'}</td>
+      <td>${r.MAE ?? '—'}</td>
+      <td>${r.MAPE ?? '—'}</td>
+      <td>${r.RMSE ?? '—'}</td>
+      <td>${r.sMAPE ?? '—'}</td>
+    </tr>`).join('');
+}
+
+// ── CSV download ───────────────────────────────────────────────────────────────
+function toCSV(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  return [headers.join(','), ...rows.map(r => headers.map(h => r[h] ?? '').join(','))].join('\n');
+}
+function downloadCSV(data, filename) {
+  const blob = new Blob([toCSV(data)], { type: 'text/csv' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: filename });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('dl-forecast').addEventListener('click', () => downloadCSV(_forecastData, 'forecast.csv'));
+document.getElementById('dl-metrics').addEventListener('click', () => downloadCSV(_metricsData, 'metrics.csv'));
+
+// ── Main forecast ──────────────────────────────────────────────────────────────
+document.getElementById('btn-forecast').addEventListener('click', async function() {
+  clearAlert();
+  const btn = this;
+  isForecasting = true;
+
+  // ── Build form data ────────────────────────────────────────────────────────
+  const fd = new FormData();
+  fd.append('model_name', document.getElementById('model').value);
+  fd.append('fh',         document.getElementById('forecast-slider').value);
+  fd.append('max_steps',  document.getElementById('nshot-range').value);
+  fd.append('cv_windows', document.getElementById('cvWindow').value);
+
+  const activeTab = document.querySelector('.tab-btn.active').dataset.target;
+  if (activeTab === 'panel_upload') {
+    if (!fileInput.files.length) { showAlert('Please select a CSV file to upload.'); return; }
+    fd.append('file', fileInput.files[0]);
+    fd.append('timestamp_col', document.getElementById('timestamp-col').value);
+    fd.append('value_col',     document.getElementById('value-col').value);
+    const idColVal = document.getElementById('id-col').value;
+    if (idColVal) fd.append('unique_id_col', idColVal);
+  } else if (activeTab === 'panel_url') {
+    const url = document.getElementById('csv-url').value.trim();
+    if (!url) { showAlert('Please enter a CSV URL.'); return; }
+    if (!isValidUrl(url)) { showAlert('Please enter a valid HTTP/HTTPS URL.'); return; }
+    fd.append('url_input', url);
+  } else {
+    fd.append('data_selection', document.getElementById('dataset').value);
+  }
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  btn.disabled = true;
+  btn.classList.add('loading');
+  showLoading('Running Forecast…', 'Inference may take 15–60 seconds on CPU');
+  document.getElementById('results-forecast').classList.remove('visible');
+  document.getElementById('results-cv').classList.remove('visible');
+
+  try {
+    const res = await authFetch('/api/forecast/', { method: 'POST', body: fd });
+
+    // ── Parse error response ──────────────────────────────────────────────────
+    if (!res.ok) {
+      let detail = `Server returned ${res.status}`;
+      try {
+        const errJson = await res.json();
+        detail = errJson.detail || detail;
+        if (Array.isArray(errJson.detail)) {
+          // FastAPI validation errors
+          detail = errJson.detail.map(e => `${e.loc?.join('.')} — ${e.msg}`).join('\n');
+        }
+      } catch { /* use status code msg */ }
+      showAlert(detail);
+      return;
+    }
+
+    const data = await res.json();
+
+    // ── Forecast results ──────────────────────────────────────────────────────
+    document.getElementById('inference-time').textContent = `⏱ ${data.inference_time || '—'}`;
+    renderForecastTable(data.forecast_data || []);
+
+    const fp = JSON.parse(data.forecast_plot_json);
+    console.log('[Forecast Plot Traces]', fp.data.map((t, i) => ({ index: i, name: t.name, mode: t.mode, visible: t.visible })));
+    console.log('[Forecast Plot Layout]', fp.layout);
+    Plotly.newPlot('forecast-plot', fp.data, fp.layout, { responsive: true, displaylogo: false });
+
+    document.getElementById('results-forecast').classList.add('visible');
+
+    // ── CV results ────────────────────────────────────────────────────────────
+    if (data.evaluation_metrics && data.evaluation_metrics.length > 0) {
+      renderCvTable(data.evaluation_metrics);
+      const cp = JSON.parse(data.cv_plot_json);
+      console.log('[CV Plot Traces]', cp.data.map((t, i) => ({ index: i, name: t.name, mode: t.mode, visible: t.visible })));
+      console.log('[CV Plot Layout]', cp.layout);
+      if (cp.data && cp.data.length > 0) {
+        Plotly.newPlot('cv-plot', cp.data, cp.layout, { responsive: true, displaylogo: false });
+      } else {
+        document.getElementById('cv-plot').innerHTML =
+          '<p style="text-align:center;color:var(--muted);padding:2rem">No CV plot data.</p>';
+      }
+      document.getElementById('results-cv').classList.add('visible');
+    }
+
+    toast('Forecast complete.');
+
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'TypeError') {
+      showAlert('Cannot reach the backend. Check your network connection and verify the server is running.');
+    } else {
+      showAlert('Unexpected error: ' + err.message);
+    }
+    console.error('[MetOcean Forecast Error]', err);
+  } finally {
+    isForecasting = false;
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    hideLoading();
+  }
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - MetOcean Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        @media (max-width: 1024px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            background: #f9f9f9;
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input[type="email"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: #e0e0e0;
+            color: #333;
+            font-size: 12px;
+            padding: 8px 12px;
+            margin-right: 5px;
+        }
+
+        button.secondary:hover {
+            background: #d0d0d0;
+            box-shadow: none;
+        }
+
+        button.danger {
+            background: #f44336;
+        }
+
+        button.danger:hover {
+            box-shadow: 0 5px 20px rgba(244, 67, 54, 0.4);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead {
+            background: #f0f0f0;
+            position: sticky;
+            top: 0;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-accepted {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .status-pending {
+            background: #fff9c4;
+            color: #f57f17;
+        }
+
+        .status-admin {
+            background: #b3e5fc;
+            color: #0277bd;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #c8e6c9;
+            color: #2e7d32;
+            border: 1px solid #81c784;
+        }
+
+        .alert-error {
+            background: #ffcdd2;
+            color: #c62828;
+            border: 1px solid #ef5350;
+        }
+
+        .alert-info {
+            background: #b3e5fc;
+            color: #0277bd;
+            border: 1px solid #4fc3f7;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            color: #667eea;
+            padding: 10px 20px;
+            border: 2px solid white;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: transparent;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .grid-2cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2cols {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+
+    <div class="container">
+        <div class="header">
+            <h1>Admin Dashboard</h1>
+            <p>Manage Users & Send Invitations</p>
+        </div>
+
+        <div class="content">
+            <!-- Invite New User Section -->
+            <div class="section">
+                <h2>📧 Send Invitation</h2>
+                <div id="inviteAlert"></div>
+                <form onsubmit="inviteUser(event)">
+                    <div class="form-group">
+                        <label for="inviteEmail">Email Address</label>
+                        <input type="email" id="inviteEmail" placeholder="newuser@example.com" required>
+                    </div>
+                    <button type="submit" style="width: 100%;">Send Invitation</button>
+                </form>
+            </div>
+
+            <!-- Registered Users Section -->
+            <div class="section">
+                <h2>👥 Registered Users</h2>
+                <div id="usersContainer" class="loading">
+                    <div class="spinner"></div>
+                    Loading users...
+                </div>
+            </div>
+
+            <!-- Pending Invites Section -->
+            <div class="section" style="grid-column: 1 / -1;">
+                <h2>⏳ Pending Invitations</h2>
+                <div id="invitesContainer" class="loading">
+                    <div class="spinner"></div>
+                    Loading invitations...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TOKEN_KEY = 'metocean_token';  // Match login.html and forecast.html
+        
+        // Build API URL based on environment
+        // For localhost (dev), use direct connection to port 8000
+        // For production (Nginx), use relative /api path
+        const apiUrl = path => {
+          if (window.location.hostname === 'localhost' && window.location.port === '8000') {
+            return 'http://localhost:8000' + path;
+          }
+          // Production: use relative path (Nginx proxies /api to backend)
+          return window.location.protocol + '//' + window.location.host + '/api' + path;
+        };
+        
+        let token = localStorage.getItem(TOKEN_KEY);
+
+        if (!token) {
+            window.location.href = '/login.html';  // Redirect to login, not forecast
+        }
+
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers();
+            loadInvites();
+        });
+
+        // Fetch with auth header
+        async function authFetch(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...options.headers,
+            };
+
+            const response = await fetch(url, {
+                ...options,
+                headers,
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                logout();
+                return null;
+            }
+
+            return response;
+        }
+
+        // Load registered users
+        async function loadUsers() {
+            try {
+                const response = await authFetch(apiUrl('/admin/users'));
+                if (!response) return;
+
+                const users = await response.json();
+                const container = document.getElementById('usersContainer');
+
+                if (users.length === 0) {
+                    container.innerHTML = '<p style="color: #999;">No users registered yet.</p>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Joined</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                users.forEach(user => {
+                    const joinDate = new Date(user.created_at).toLocaleDateString();
+                    const adminBadge = user.is_admin ? '<span class="status-badge status-admin">Admin</span>' : '';
+                    
+                    html += `
+                        <tr>
+                            <td>${user.email}</td>
+                            <td>${adminBadge}</td>
+                            <td>${joinDate}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="secondary danger" onclick="deleteUser(${user.id}, '${user.email}')">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading users:', error);
+                document.getElementById('usersContainer').innerHTML = '<p style="color: red;">Error loading users.</p>';
+            }
+        }
+
+        // Load pending invitations
+        async function loadInvites() {
+            try {
+                const response = await authFetch(apiUrl('/admin/invites'));
+                if (!response) return;
+
+                const invites = await response.json();
+                const container = document.getElementById('invitesContainer');
+
+                if (invites.length === 0) {
+                    container.innerHTML = '<p style="color: #999;">No pending invitations.</p>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Sent</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                invites.forEach(invite => {
+                    const sentDate = new Date(invite.created_at).toLocaleDateString();
+                    const status = invite.accepted ? 
+                        '<span class="status-badge status-accepted">Accepted</span>' :
+                        '<span class="status-badge status-pending">Pending</span>';
+                    
+                    html += `
+                        <tr>
+                            <td>${invite.email}</td>
+                            <td>${status}</td>
+                            <td>${sentDate}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    ${!invite.accepted ? `<button class="secondary" onclick="resendInvite(${invite.id}, '${invite.email}')">Resend</button>` : ''}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading invites:', error);
+                document.getElementById('invitesContainer').innerHTML = '<p style="color: red;">Error loading invitations.</p>';
+            }
+        }
+
+        // Send invitation
+        async function inviteUser(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('inviteEmail').value;
+            const alertDiv = document.getElementById('inviteAlert');
+
+            try {
+                const response = await authFetch(apiUrl('/admin/invite'), {
+                    method: 'POST',
+                    body: JSON.stringify({ email }),
+                });
+
+                if (!response) return;
+
+                if (response.ok) {
+                    alertDiv.innerHTML = `<div class="alert alert-success">✓ Invitation sent to ${email}</div>`;
+                    document.getElementById('inviteEmail').value = '';
+                    setTimeout(() => loadInvites(), 1000);
+                } else {
+                    const error = await response.json();
+                    alertDiv.innerHTML = `<div class="alert alert-error">✗ ${error.detail || 'Failed to send invitation'}</div>`;
+                }
+            } catch (error) {
+                console.error('Error sending invitation:', error);
+                alertDiv.innerHTML = `<div class="alert alert-error">✗ Error sending invitation</div>`;
+            }
+        }
+
+        // Resend invitation
+        async function resendInvite(inviteId, email) {
+            try {
+                const response = await authFetch(apiUrl(`/admin/invites/${inviteId}/resend`), {
+                    method: 'POST',
+                });
+
+                if (!response) return;
+
+                if (response.ok) {
+                    alert(`Invitation resent to ${email}`);
+                    loadInvites();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.detail}`);
+                }
+            } catch (error) {
+                console.error('Error resending invitation:', error);
+                alert('Error resending invitation');
+            }
+        }
+
+        // Delete user
+        async function deleteUser(userId, email) {
+            if (!confirm(`Are you sure you want to deactivate ${email}?`)) return;
+
+            try {
+                const response = await authFetch(apiUrl(`/admin/users/${userId}`), {
+                    method: 'DELETE',
+                });
+
+                if (!response) return;
+
+                if (response.ok) {
+                    alert(`User ${email} deactivated`);
+                    loadUsers();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.detail}`);
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Error deactivating user');
+            }
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/forecast.html';
+        }
+    </script>
+</body>
+</html>
