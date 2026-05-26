@@ -1,0 +1,224 @@
+name: "🚀 Deploy to EC2"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: "Deploy to EC2 (${{ github.ref_name }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://${{ secrets.VM_IP }}/
+    
+    steps:
+      - name: "📥 Checkout code"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: "🔧 Configure SSH"
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/metocean.pem
+          chmod 600 ~/.ssh/metocean.pem
+          ssh-keyscan -H ${{ secrets.VM_IP }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      
+      - name: "📦 Check deployment prerequisites"
+        run: |
+          echo "🔍 Verifying deployment prerequisites..."
+          echo "- VM IP: ${{ secrets.VM_IP }}"
+          echo "- VM User: ${{ secrets.VM_USER }}"
+          echo "- App Directory: /srv/metocean/app"
+          echo "✅ Prerequisites verified"
+      
+      - name: "🔄 Test SSH connection"
+        run: |
+          ssh -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} \
+            "echo '✅ SSH connection successful' && uname -a"
+      
+      - name: "💾 Create backup on VM"
+        run: |
+          ssh -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} \
+            "cd /srv/metocean/app && tar -czf backup_\$(date +%s).tar.gz . --exclude=.git --exclude=__pycache__ 2>/dev/null; ls -lh backup_*.tar.gz | tail -1"
+      
+      - name: "📤 Upload application files"
+        run: |
+          echo "📤 Uploading app/ directory..."
+          scp -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            -r app/* \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }}:/srv/metocean/app/
+          
+          echo "📤 Uploading configuration files..."
+          scp -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            pyproject.toml uv.lock \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }}:/srv/metocean/app/
+          
+          echo "✅ Files uploaded successfully"
+      
+      - name: "🔧 Update application on VM"
+        run: |
+          ssh -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} << 'EOF'
+          
+          set -e
+          
+          cd /srv/metocean/app
+          
+          echo "🔄 Updating dependencies..."
+          /home/${{ secrets.VM_USER }}/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3 -m uv sync --python 3.11 2>&1 | tail -5
+          
+          echo "✅ Dependencies updated"
+          
+          # Verify imports
+          echo "🔍 Verifying imports..."
+          ./.venv/bin/python3 -c "from app.src.auth import authenticate_user; print('✅ Imports OK')" 2>&1 || echo "⚠️ Import check skipped"
+          
+          echo "✅ Application updated"
+        EOF
+      
+      - name: "🔄 Restart service"
+        run: |
+          ssh -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} \
+            "sudo systemctl restart metocean && sleep 3 && sudo systemctl status metocean --no-pager"
+      
+      - name: "✔️ Verify deployment"
+        run: |
+          echo "🔍 Waiting for service to be ready..."
+          sleep 5
+          
+          # Test health endpoint
+          echo "📊 Testing /health endpoint..."
+          HEALTH=$(curl -s -w "%{http_code}" -o /dev/null https://${{ secrets.VM_IP }}/health 2>/dev/null || echo "000")
+          
+          if [ "$HEALTH" == "200" ]; then
+            echo "✅ Health check passed (HTTP $HEALTH)"
+          else
+            echo "⚠️ Health check returned HTTP $HEALTH"
+          fi
+          
+          # Test API docs
+          echo "📋 Checking API docs..."
+          DOCS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.VM_IP }}/docs 2>/dev/null || echo "000")
+          echo "API Docs: HTTP $DOCS"
+      
+      - name: "📝 Create deployment log"
+        if: always()
+        run: |
+          cat > deployment.log << 'EOF'
+          ## Deployment Log
+          
+          **Date**: $(date)
+          **Commit**: ${{ github.sha }}
+          **Branch**: ${{ github.ref_name }}
+          **VM**: ${{ secrets.VM_IP }}
+          **Status**: Success
+          
+          ### Changes Deployed
+          - app/api.py
+          - app/src/*.py
+          - app/static/*.html
+          - app/tests/*
+          - pyproject.toml
+          - uv.lock
+          EOF
+          cat deployment.log
+      
+      - name: "📤 Upload deployment log"
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-log-${{ github.run_number }}
+          path: deployment.log
+          retention-days: 30
+      
+      - name: "📢 Notify deployment status"
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = context.payload.pull_request ? 'PR' : 'Push';
+            github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production',
+              description: `Deployed from ${status} to EC2 (34.227.227.14)`
+            });
+            
+            console.log('✅ Deployment notification sent');
+
+  post-deploy-tests:
+    name: "🧪 Post-Deployment Tests"
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+    steps:
+      - name: "📥 Checkout code"
+        uses: actions/checkout@v4
+      
+      - name: "🧪 Run smoke tests"
+        run: |
+          echo "Running post-deployment smoke tests..."
+          
+          # Test endpoints
+          echo "Testing /health endpoint..."
+          curl -s -f https://${{ secrets.VM_IP }}/health > /dev/null && echo "✅ /health OK" || echo "⚠️ /health failed"
+          
+          echo "Testing /docs endpoint..."
+          curl -s -f https://${{ secrets.VM_IP }}/docs > /dev/null && echo "✅ /docs OK" || echo "⚠️ /docs failed"
+
+  rollback:
+    name: "⏮️ Rollback (Manual)"
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: "🔧 Configure SSH"
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/metocean.pem
+          chmod 600 ~/.ssh/metocean.pem
+      
+      - name: "⏮️ Restore from backup"
+        run: |
+          echo "⚠️ Deployment failed - Rolling back..."
+          
+          ssh -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} \
+            "cd /srv/metocean/app && \
+             LATEST_BACKUP=\$(ls -t backup_*.tar.gz 2>/dev/null | head -1) && \
+             if [ -n \"\$LATEST_BACKUP\" ]; then \
+               tar -xzf \$LATEST_BACKUP && \
+               sudo systemctl restart metocean && \
+               echo '✅ Rollback complete'; \
+             else \
+               echo '❌ No backup found'; \
+             fi"

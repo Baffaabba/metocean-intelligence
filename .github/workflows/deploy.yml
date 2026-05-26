@@ -1,0 +1,250 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+      - deploy
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  APP_DIR: /srv/metocean/app
+  BACKUP_DIR: /srv/metocean/backups
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8 black
+      
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 api_new.py src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 api_new.py src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Check formatting with black
+        run: black --check api_new.py src/ || true
+      
+      - name: Run basic import tests
+        run: |
+          python -c "from src.nf import MODELS; print(f'Models available: {len(MODELS)}')"
+          python -c "from src.auth import create_access_token; print('Auth module OK')"
+          python -c "from src.db import init_db; print('Database module OK')"
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Create backup
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          mkdir -p $BACKUP_DIR
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          echo "Creating backup: $TIMESTAMP"
+          
+          # Backup current files
+          cp $APP_DIR/api.py $BACKUP_DIR/api.py.backup.$TIMESTAMP
+          [ -d $APP_DIR/src ] && cp -r $APP_DIR/src $BACKUP_DIR/src.backup.$TIMESTAMP
+          [ -f $APP_DIR/.env ] && cp $APP_DIR/.env $BACKUP_DIR/.env.backup.$TIMESTAMP
+          
+          # Keep only last 5 backups
+          ls -t $BACKUP_DIR/api.py.backup.* | tail -n +6 | xargs -r rm
+          
+          echo "✓ Backup created: $TIMESTAMP"
+          EOF
+      
+      - name: Deploy files
+        run: |
+          echo "Deploying to ${{ secrets.EC2_HOST }}"
+          scp -i ~/.ssh/id_rsa api_new.py ubuntu@${{ secrets.EC2_HOST }}:$APP_DIR/api.py
+          scp -i ~/.ssh/id_rsa forecast.html ubuntu@${{ secrets.EC2_HOST }}:$APP_DIR/forecast.html
+          scp -r -i ~/.ssh/id_rsa src/ ubuntu@${{ secrets.EC2_HOST }}:$APP_DIR/src
+          echo "✓ Files deployed"
+      
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "Checking deployed files..."
+          
+          # Verify API file
+          if [ -f $APP_DIR/api.py ]; then
+            LINES=$(wc -l < $APP_DIR/api.py)
+            echo "✓ api.py deployed ($LINES lines)"
+          else
+            echo "❌ api.py not found"
+            exit 1
+          fi
+          
+          # Verify forecast.html
+          if [ -f $APP_DIR/forecast.html ]; then
+            SIZE=$(stat -f%z $APP_DIR/forecast.html 2>/dev/null || stat -c%s $APP_DIR/forecast.html 2>/dev/null)
+            echo "✓ forecast.html deployed ($SIZE bytes)"
+          else
+            echo "❌ forecast.html not found"
+            exit 1
+          fi
+          
+          # Verify src directory
+          if [ -d $APP_DIR/src ]; then
+            COUNT=$(find $APP_DIR/src -name "*.py" | wc -l)
+            echo "✓ src/ deployed ($COUNT Python files)"
+          else
+            echo "❌ src/ not found"
+            exit 1
+          fi
+          EOF
+      
+      - name: Restart service
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "Restarting metocean service..."
+          sudo systemctl restart metocean
+          
+          # Wait for service to start
+          sleep 2
+          
+          # Check status
+          if sudo systemctl is-active --quiet metocean; then
+            echo "✓ Service restarted successfully"
+          else
+            echo "❌ Service failed to start"
+            sudo journalctl -u metocean -n 20
+            exit 1
+          fi
+          EOF
+      
+      - name: Health check
+        run: |
+          echo "Waiting for service to become ready..."
+          for i in {1..30}; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/health || echo "000")
+            if [ "$RESPONSE" == "200" ]; then
+              echo "✓ Health check passed"
+              curl -s http://${{ secrets.EC2_HOST }}/health | python -m json.tool
+              exit 0
+            fi
+            echo "  Attempt $i/30: HTTP $RESPONSE"
+            sleep 2
+          done
+          echo "❌ Health check failed after 30 attempts"
+          exit 1
+      
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          
+          # Test /docs endpoint
+          DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/docs)
+          if [ "$DOCS_STATUS" == "200" ]; then
+            echo "✓ API docs accessible"
+          else
+            echo "❌ API docs returned $DOCS_STATUS"
+          fi
+          
+          # Test /models endpoint (requires auth, but endpoint should exist)
+          MODELS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/models/)
+          if [ "$MODELS_STATUS" == "403" ] || [ "$MODELS_STATUS" == "200" ]; then
+            echo "✓ Models endpoint accessible (HTTP $MODELS_STATUS)"
+          fi
+      
+      - name: Send Slack notification (success)
+        if: success()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ MetOcean Deployment Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*✅ MetOcean Intelligence Platform*\nDeployment to ${{ secrets.EC2_HOST }} completed successfully\n\n*Branch:* ${{ github.ref }}\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+      
+      - name: Send Slack notification (failure)
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ MetOcean Deployment Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*❌ MetOcean Intelligence Platform*\nDeployment to ${{ secrets.EC2_HOST }} failed\n\n*Branch:* ${{ github.ref }}\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Logs>"
+                  }
+                }
+              ]
+            }
+
+  rollback:
+    name: Rollback (Manual)
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: List available backups
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "Available backups (most recent first):"
+          ls -t /srv/metocean/backups/api.py.backup.* | head -5
+          EOF
+      
+      - name: Rollback instruction
+        run: |
+          echo "To rollback, run on EC2:"
+          echo "  BACKUP=\$(ls -t /srv/metocean/backups/api.py.backup.* | head -1)"
+          echo "  cp \$BACKUP /srv/metocean/app/api.py"
+          echo "  sudo systemctl restart metocean"
