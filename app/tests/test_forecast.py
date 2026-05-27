@@ -23,7 +23,7 @@ class TestDataProcessing:
         """Should parse CSV with standard comma delimiter"""
         # This would test actual CSV parsing
         csv_content = "date,value\n2020-01-01,100\n2020-01-02,105"
-        df = pd.read_csv(pd.StringIO(csv_content))
+        df = pd.read_csv(StringIO(csv_content))
         
         assert len(df) == 2
         assert list(df.columns) == ["date", "value"]
@@ -32,7 +32,7 @@ class TestDataProcessing:
         """Should handle different CSV delimiters"""
         # Tab-delimited CSV
         csv_content = "date\tvalue\n2020-01-01\t100\n2020-01-02\t105"
-        df = pd.read_csv(pd.StringIO(csv_content), delimiter="\t")
+        df = pd.read_csv(StringIO(csv_content), delimiter="\t")
         
         assert len(df) == 2
         assert "date" in df.columns

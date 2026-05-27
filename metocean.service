@@ -1,0 +1,46 @@
+# /etc/systemd/system/metocean.service
+# Systemd unit — runs MetOcean FastAPI app under uvicorn
+
+[Unit]
+Description=MetOcean Intelligence Platform (uvicorn)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=metocean
+Group=metocean
+WorkingDirectory=/srv/metocean/app
+
+# Load secrets and runtime paths
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/srv/metocean/config/metocean.env
+
+# Start command — uses the uv-managed virtualenv
+ExecStart=/srv/metocean/app/.venv/bin/uvicorn api:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --log-level info \
+    --access-log \
+    --timeout-keep-alive 75
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60
+StartLimitBurst=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/srv/metocean/logs /srv/metocean/models /srv/metocean/app
+UMask=0027
+
+# Logging — readable via: journalctl -u metocean -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=metocean
+
+[Install]
+WantedBy=multi-user.target
