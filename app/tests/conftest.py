@@ -21,27 +21,31 @@ def test_db_engine():
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Import models and create all tables
+    # Import models and create all tables once
     from app.src.models import Base
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
-    # Cleanup at end of test
-    Base.metadata.drop_all(bind=engine)
+    # Just close the connection without dropping (in-memory DB will be freed when no connections remain)
 
 
 @pytest.fixture
 def temp_db(test_db_engine):
     """Create fresh session for each test"""
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import delete
+    from app.src.models import Base
     
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     session = SessionLocal()
     
     yield session
     
-    # Cleanup test data
+    # Clear all data from all tables
+    for table in reversed(Base.metadata.sorted_tables):
+        session.execute(delete(table))
+    session.commit()
     session.close()
 
 
