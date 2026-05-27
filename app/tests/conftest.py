@@ -17,25 +17,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 @pytest.fixture
 def temp_db():
-    """Create temporary SQLite database for testing"""
-    db_fd, db_path = tempfile.mkstemp(suffix=".db")
-    
-    # Use sqlite:/// for in-memory or file-based
-    database_url = f"sqlite:///{db_path}"
+    """Create temporary in-memory SQLite database for testing"""
+    # Use in-memory SQLite database for cleaner test isolation
+    database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Create tables
+    # Import fresh models and create tables
     from app.src.models import Base
-    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
     
-    yield SessionLocal()
+    yield session
     
     # Cleanup
-    os.close(db_fd)
-    os.unlink(db_path)
+    session.close()
+    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
