@@ -15,25 +15,32 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.fixture
-def temp_db():
-    """Create temporary in-memory SQLite database for testing"""
-    # Use in-memory SQLite database for cleaner test isolation
+@pytest.fixture(scope="session")
+def test_db_engine():
+    """Create session-scoped database engine for all tests"""
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Import fresh models and create tables
+    # Import models and create all tables once
     from app.src.models import Base
     Base.metadata.create_all(bind=engine)
     
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    yield engine
+    
+    # Cleanup at end of session
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def temp_db(test_db_engine):
+    """Create fresh session for each test"""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     session = SessionLocal()
     
     yield session
     
-    # Cleanup
+    # Cleanup test data
     session.close()
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -73,20 +80,11 @@ def mock_env(monkeypatch):
 
 
 @pytest.fixture
-def test_client(mock_env, monkeypatch):
+def test_client(mock_env, test_db_engine):
     """Create TestClient for API testing"""
     from app.api import app, get_db
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
     
-    # Use in-memory SQLite for testing
-    SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-    
-    from app.src.models import Base
-    Base.metadata.create_all(bind=engine)
-    
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     
     def override_get_db():
         db = SessionLocal()
