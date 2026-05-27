@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from src.db import get_db
 from src.models import User, UserInvite
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 JWT_SECRET = os.getenv("METOCEAN_JWT_SECRET", "change-this-in-production")
 JWT_ALGORITHM = os.getenv("METOCEAN_JWT_ALGORITHM", "HS256")
