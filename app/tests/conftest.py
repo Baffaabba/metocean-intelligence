@@ -15,25 +15,27 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def test_db_engine():
-    """Create session-scoped database engine for all tests"""
+    """Create fresh in-memory database engine for each test"""
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Import models and create all tables once
+    # Import models and create all tables
     from app.src.models import Base
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
-    # Cleanup at end of session
+    # Cleanup at end of test
     Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
 def temp_db(test_db_engine):
     """Create fresh session for each test"""
+    from sqlalchemy.orm import sessionmaker
+    
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     session = SessionLocal()
     
