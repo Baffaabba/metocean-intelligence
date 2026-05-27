@@ -11,25 +11,28 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger("metocean.email")
 
-# AWS SES Configuration
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", "noreply@metoceanai.com")
-APP_URL = os.getenv("APP_URL", "http://localhost:3000")
+# AWS SES Configuration (read at function call time, not import time)
+AWS_REGION = "us-east-1"
+APP_URL = "http://localhost:3000"
 
 
 def get_ses_client():
-    """Create and return AWS SES client."""
-    if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+    """Create and return AWS SES client.
+    
+    Credentials are read from environment at call time to allow tests to configure them.
+    """
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID", "")
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    
+    if not aws_access_key_id or not aws_secret_access_key:
         logger.warning("AWS credentials not configured. Email sending disabled.")
         return None
     
     return boto3.client(
         "ses",
-        region_name=AWS_REGION,
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=os.getenv("AWS_REGION", AWS_REGION),
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
     )
 
 
@@ -54,7 +57,9 @@ def send_invite_email(
         logger.error("Cannot send email: AWS SES not configured")
         return False
     
-    accept_url = f"{APP_URL}/accept-invite.html?token={invite_token}"
+    sender_email = os.getenv("SENDER_EMAIL", "noreply@metoceanai.com")
+    app_url = os.getenv("APP_URL", "http://localhost:3000")
+    accept_url = f"{app_url}/accept-invite.html?token={invite_token}"
     
     subject = f"Invitation to {app_name}"
     html_body = f"""
@@ -93,7 +98,7 @@ def send_invite_email(
     
     try:
         response = client.send_email(
-            Source=SENDER_EMAIL,
+            Source=sender_email,
             Destination={"ToAddresses": [recipient_email]},
             Message={
                 "Subject": {"Data": subject},
@@ -121,7 +126,9 @@ def send_password_reset_email(
         logger.error("Cannot send email: AWS SES not configured")
         return False
     
-    reset_url = f"{APP_URL}/reset-password.html?token={reset_token}"
+    sender_email = os.getenv("SENDER_EMAIL", "noreply@metoceanai.com")
+    app_url = os.getenv("APP_URL", "http://localhost:3000")
+    reset_url = f"{app_url}/reset-password.html?token={reset_token}"
     
     subject = f"Password Reset - {app_name}"
     html_body = f"""
@@ -144,7 +151,7 @@ def send_password_reset_email(
     
     try:
         response = client.send_email(
-            Source=SENDER_EMAIL,
+            Source=sender_email,
             Destination={"ToAddresses": [recipient_email]},
             Message={
                 "Subject": {"Data": subject},
