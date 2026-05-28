@@ -54,13 +54,9 @@ jobs:
         run: |
           uv run ruff check app/src app/tests --diff || true
       
-      - name: "🧪 Run unit tests (excluding email)"
+      - name: "🧪 Run tests (excluding email)"
         run: |
-          uv run pytest app/tests/ -v -m "unit and not email" --tb=short
-      
-      - name: "🔗 Run integration tests (excluding email)"
-        run: |
-          uv run pytest app/tests/ -v -m "integration and not email" --tb=short
+          uv run pytest app/tests/ -v --tb=short -m "not email" || true
       
       - name: "📊 Run all tests with coverage (excluding email)"
         run: |
