@@ -17,30 +17,34 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 @pytest.fixture
 def test_db_engine():
-    """Create function-scoped in-memory database for each test with clean metadata"""
+    """Create function-scoped in-memory database for each test"""
     from app.src.models import Base
+    import importlib
+    import app.src.models as models_module
     
-    # Drop all existing tables from metadata first
-    # This is the key to avoiding index conflicts between tests
-    try:
-        Base.metadata.drop_all()
-    except Exception:
-        pass  # In case drop fails on first run
+    # CRITICAL FIX: Reload models module to force fresh Base.metadata
+    # This is the only way to get a truly clean metadata registry
+    importlib.reload(models_module)
+    Base = models_module.Base
     
-    # Create temporary database
-    database_url = "sqlite:///:memory:"
-    engine = create_engine(database_url, connect_args={"check_same_thread": False})
+    # Create unique temp database to avoid connection pooling issues
+    import uuid
+    db_name = f"file:/:memory:?cache=shared&hex&seed={uuid.uuid4().hex[:16]}"
     
-    # Re-create all tables with clean state
+    # Create engine with NO connection pooling to avoid metadata conflicts
+    from sqlalchemy.pool import NullPool
+    engine = create_engine(
+        f"sqlite:///{db_name}",
+        connect_args={"check_same_thread": False, "uri": True},
+        poolclass=NullPool  # Disable connection pooling entirely
+    )
+    
+    # Create all tables
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
     # Cleanup
-    try:
-        Base.metadata.drop_all(bind=engine)
-    except Exception:
-        pass
     engine.dispose()
 
 
