@@ -14,21 +14,42 @@ import tempfile
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ---------------------------------------------------------------------------
+# CRITICAL: Prevent duplicate module execution caused by mixed import paths.
+#
+# Source files in app/src/ use:  "from src.xxx import yyy"   (via app/ in path)
+# api.py uses:                   "from app.src.xxx import yyy" (from repo root)
+#
+# When Python sees both paths pointing to the same .py file, it executes
+# models.py TWICE — once as "src.models" and once as "app.src.models".
+# The second execution runs "class User(Base)" again with extend_existing=True,
+# which APPENDS duplicate Index objects to Base.metadata.  When create_all()
+# runs it then issues CREATE INDEX twice on the same empty database, which
+# SQLite rejects with "index already exists".
+#
+# Fix: after loading the src.* modules the normal way, alias them under the
+# app.src.* names so Python returns the cached objects instead of re-running
+# the module file.
+# ---------------------------------------------------------------------------
+import src.db       # noqa: F401 – populates sys.modules['src.db']
+import src.models   # noqa: F401 – populates sys.modules['src.models']
+import src.auth     # noqa: F401 – populates sys.modules['src.auth']
+
+sys.modules.setdefault('app.src.db',     sys.modules['src.db'])
+sys.modules.setdefault('app.src.models', sys.modules['src.models'])
+sys.modules.setdefault('app.src.auth',   sys.modules['src.auth'])
+
 
 @pytest.fixture
 def test_db_engine():
     """Create function-scoped in-memory SQLite database for each test.
 
-    Each call gets a brand-new SQLite :memory: engine whose pool is
-    independent from every other engine, so tables/indexes are always
-    created on a completely empty database.
+    Module aliasing at the top of this file ensures models.py is executed
+    only once, so Base.metadata contains exactly one Index object per index
+    (no duplicates).  Each call to this fixture creates a fresh :memory:
+    engine, so tables/indexes are always created on a completely empty DB.
     """
-    # Import models so their classes are registered in Base.metadata.
-    # Do NOT reload the module — reloading with extend_existing=True
-    # appends duplicate Index objects to the metadata, which causes
-    # SQLite to raise "index already exists" on the second CREATE INDEX.
-    import app.src.models  # noqa: F401 – side-effect: registers tables
-    from app.src.models import Base
+    from src.db import Base
 
     engine = create_engine(
         "sqlite:///:memory:",
@@ -96,22 +117,31 @@ def mock_env(monkeypatch):
 @pytest.fixture
 def test_client(mock_env, test_db_engine):
     """Create TestClient for API testing"""
+    import app.api as api_module
     from app.api import app, get_db
-    
+    from src.db import Base
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
-    
+
     def override_get_db():
         db = SessionLocal()
         try:
             yield db
         finally:
             db.close()
-    
+
+    # init_db() uses the module-level postgres engine which is unavailable in CI.
+    # Replace it with a no-op so the lifespan doesn't blow up during tests.
+    # Tables are already created by test_db_engine; get_db is overridden above.
+    original_init_db = api_module.init_db
+    api_module.init_db = lambda: None
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     client = TestClient(app)
     yield client
-    
+
+    api_module.init_db = original_init_db
     app.dependency_overrides.clear()
 
 
