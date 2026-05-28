@@ -27,13 +27,18 @@ def test_db_engine():
     
     yield engine
     
-    # Cleanup at end of test
+    # Cleanup at end of test: drop all tables and dispose engine
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
     
-    # Clear metadata to prevent index conflicts in next test
+    # Clear all tables from metadata to prevent index conflicts
+    # This is critical: removing tables ensures clean state for next test
     for table in list(Base.metadata.tables.values()):
         Base.metadata.remove(table)
+    
+    # Reset all indexes for clean state
+    for constraint in list(Base.metadata.constraints):
+        Base.metadata.constraints.discard(constraint)
 
 
 @pytest.fixture
