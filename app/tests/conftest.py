@@ -17,31 +17,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 @pytest.fixture
 def test_db_engine():
-    """Create function-scoped in-memory database for each test"""
+    """Create function-scoped in-memory SQLite database for each test.
+
+    Each call gets a brand-new SQLite :memory: engine whose pool is
+    independent from every other engine, so tables/indexes are always
+    created on a completely empty database.
+    """
+    # Import models so their classes are registered in Base.metadata.
+    # Do NOT reload the module — reloading with extend_existing=True
+    # appends duplicate Index objects to the metadata, which causes
+    # SQLite to raise "index already exists" on the second CREATE INDEX.
+    import app.src.models  # noqa: F401 – side-effect: registers tables
     from app.src.models import Base
-    import importlib
-    import app.src.models as models_module
-    
-    # CRITICAL: Reload models module to force fresh Base.metadata instance
-    # This is essential to break SQLAlchemy's metadata singleton caching
-    importlib.reload(models_module)
-    Base = models_module.Base
-    
-    # Create in-memory database with NullPool to avoid connection pooling issues
-    # NullPool ensures each connection gets a fresh database without cross-contamination
-    from sqlalchemy.pool import NullPool
+
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
-        poolclass=NullPool  # Disable connection pooling entirely
     )
-    
-    # Create all tables
+
     Base.metadata.create_all(bind=engine)
-    
+
     yield engine
-    
-    # Cleanup
+
+    Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 
@@ -141,11 +139,20 @@ def authenticated_client(test_client, test_user_data, db_session):
 @pytest.fixture
 def admin_client(test_client, test_admin_data, db_session):
     """Client with admin authentication token"""
-    from app.src.auth import create_user, create_access_token
-    from app.src.db import init_db
-    
-    # Initialize DB with admin users
-    init_db(db_session)
+    from app.src.auth import create_access_token, hash_password
+    from app.src.models import User
+
+    # Create admin user directly in the test DB (create_user() has no is_admin param)
+    try:
+        admin = User(
+            email=test_admin_data["email"],
+            hashed_password=hash_password(test_admin_data["password"]),
+            is_admin=True,
+        )
+        db_session.add(admin)
+        db_session.commit()
+    except Exception:
+        db_session.rollback()  # user may already exist
     
     # Get admin token (use first admin email)
     admin_email = "kamaluddeen.usman@utp.edu.my"  # Default admin from db.py
