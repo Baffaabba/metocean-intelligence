@@ -18,12 +18,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 @pytest.fixture
 def test_db_engine():
     """Create function-scoped in-memory database engine for each test"""
-    from app.src.models import Base
+    import importlib
+    import app.src.models as models_module
     
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Create tables for this test (extend_existing=True handles reuse)
+    # Reload models module to get fresh Base.metadata with table definitions
+    importlib.reload(models_module)
+    Base = models_module.Base
+    
+    # Create tables for this test
     Base.metadata.create_all(bind=engine)
     
     yield engine
