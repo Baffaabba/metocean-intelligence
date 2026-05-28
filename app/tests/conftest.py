@@ -15,53 +15,34 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def test_db_engine():
-    """Create session-scoped in-memory database engine for all tests"""
+    """Create function-scoped in-memory database engine for each test"""
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Import models and create all tables ONCE for entire session
+    # Import models and create all tables for this test
     from app.src.models import Base
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
-    # Cleanup at end of session
+    # Cleanup at end of test
     Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
 def temp_db(test_db_engine):
-    """Create fresh session for each test and clean up data after"""
+    """Create fresh session for each test"""
     from sqlalchemy.orm import sessionmaker
-    from sqlalchemy import delete, text
-    from app.src.models import Base
     
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     session = SessionLocal()
     
     yield session
     
-    # Clear all data from all tables by deleting all rows (order matters due to foreign keys)
-    try:
-        for table in reversed(Base.metadata.sorted_tables):
-            session.execute(delete(table))
-        # Reset SQLite auto-increment sequences
-        session.execute(text("DELETE FROM sqlite_sequence"))
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        # If delete fails, disable foreign key constraints and try again
-        session.execute(text("PRAGMA foreign_keys = OFF"))
-        for table in reversed(Base.metadata.sorted_tables):
-            session.execute(delete(table))
-        # Reset SQLite auto-increment sequences
-        session.execute(text("DELETE FROM sqlite_sequence"))
-        session.execute(text("PRAGMA foreign_keys = ON"))
-        session.commit()
-    finally:
-        session.close()
+    # Cleanup session
+    session.close()
 
 
 @pytest.fixture
