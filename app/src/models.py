@@ -10,6 +10,7 @@ from src.db import Base
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
@@ -24,6 +25,7 @@ class User(Base):
 
 class UserInvite(Base):
     __tablename__ = "user_invites"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
@@ -42,6 +44,7 @@ class UserInvite(Base):
 
 class PasswordReset(Base):
     __tablename__ = "password_resets"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
