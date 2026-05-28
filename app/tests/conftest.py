@@ -22,20 +22,17 @@ def test_db_engine():
     import importlib
     import app.src.models as models_module
     
-    # CRITICAL FIX: Reload models module to force fresh Base.metadata
-    # This is the only way to get a truly clean metadata registry
+    # CRITICAL: Reload models module to force fresh Base.metadata instance
+    # This is essential to break SQLAlchemy's metadata singleton caching
     importlib.reload(models_module)
     Base = models_module.Base
     
-    # Create unique temp database to avoid connection pooling issues
-    import uuid
-    db_name = f"file:/:memory:?cache=shared&hex&seed={uuid.uuid4().hex[:16]}"
-    
-    # Create engine with NO connection pooling to avoid metadata conflicts
+    # Create in-memory database with NullPool to avoid connection pooling issues
+    # NullPool ensures each connection gets a fresh database without cross-contamination
     from sqlalchemy.pool import NullPool
     engine = create_engine(
-        f"sqlite:///{db_name}",
-        connect_args={"check_same_thread": False, "uri": True},
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
         poolclass=NullPool  # Disable connection pooling entirely
     )
     
