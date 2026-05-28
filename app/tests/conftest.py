@@ -29,6 +29,11 @@ def test_db_engine():
     
     # Cleanup at end of test
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    
+    # Clear metadata to prevent index conflicts in next test
+    for table in list(Base.metadata.tables.values()):
+        Base.metadata.remove(table)
 
 
 @pytest.fixture
