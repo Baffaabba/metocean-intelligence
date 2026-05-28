@@ -17,28 +17,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 @pytest.fixture
 def test_db_engine():
-    """Create function-scoped temporary SQLite database for each test"""
+    """Create function-scoped in-memory database for each test with clean metadata"""
     from app.src.models import Base
     
-    # Create a temporary SQLite file for this test
-    # Using temporary file ensures complete isolation and avoids metadata caching
-    db_fd, db_path = tempfile.mkstemp(suffix=".db")
-    os.close(db_fd)
+    # Drop all existing tables from metadata first
+    # This is the key to avoiding index conflicts between tests
+    try:
+        Base.metadata.drop_all()
+    except Exception:
+        pass  # In case drop fails on first run
     
-    database_url = f"sqlite:///{db_path}"
+    # Create temporary database
+    database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Create all tables using the production models
+    # Re-create all tables with clean state
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
-    # Cleanup: dispose engine and remove temp file
-    engine.dispose()
+    # Cleanup
     try:
-        os.remove(db_path)
-    except OSError:
-        pass  # File already deleted or locked
+        Base.metadata.drop_all(bind=engine)
+    except Exception:
+        pass
+    engine.dispose()
 
 
 @pytest.fixture
