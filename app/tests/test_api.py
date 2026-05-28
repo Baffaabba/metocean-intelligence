@@ -210,12 +210,13 @@ class TestModelMetadataEndpoints:
         assert response.status_code == 401
     
     def test_datasets_endpoint_returns_list(self, authenticated_client):
-        """GET /datasets should return list of available datasets"""
+        """GET /datasets should return dict with a 'datasets' key containing a list"""
         response = authenticated_client.get("/datasets")
         
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
+        assert isinstance(data.get("datasets"), list)
     
     def test_datasets_endpoint_requires_auth(self, test_client):
         """GET /datasets should require authentication"""

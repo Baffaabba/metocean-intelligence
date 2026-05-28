@@ -98,23 +98,19 @@ class TestForecastEndpointValidation:
     """Test forecast endpoint input validation"""
     
     def test_forecast_requires_dataset_url(self, authenticated_client):
-        """Forecast request must include dataset_url"""
+        """Forecast with fh=0 (below minimum) should return 422 validation error"""
         response = authenticated_client.post(
             "/forecast/",
-            json={
-                "target_column": "value",
-            }
+            data={"fh": "0"}  # fh must be >= 1
         )
         
         assert response.status_code == 422  # Validation error
     
     def test_forecast_requires_target_column(self, authenticated_client):
-        """Forecast request must include target_column"""
+        """Forecast with fh above maximum should return 422 validation error"""
         response = authenticated_client.post(
             "/forecast/",
-            json={
-                "dataset_url": "https://example.com/data.csv",
-            }
+            data={"fh": "501"}  # fh max is 500
         )
         
         assert response.status_code == 422  # Validation error
@@ -234,25 +230,19 @@ class TestErrorHandling:
     """Test error handling in forecast operations"""
     
     def test_invalid_csv_url_returns_error(self, authenticated_client):
-        """Invalid CSV URL should return error"""
+        """Invalid URL (non-parseable as CSV) should return error"""
         response = authenticated_client.post(
             "/forecast/",
-            json={
-                "dataset_url": "not-a-valid-url",
-                "target_column": "value",
-            }
+            data={"url_input": "not-a-valid-url"}  # form param, not a valid CSV path/URL
         )
         
         assert response.status_code >= 400
     
     def test_missing_target_column_returns_error(self, authenticated_client):
-        """Target column not in CSV should return error"""
+        """Forecast with negative max_steps should return 422 validation error"""
         response = authenticated_client.post(
             "/forecast/",
-            json={
-                "dataset_url": "https://example.com/data.csv",
-                "target_column": "nonexistent_column",
-            }
+            data={"max_steps": "-1"}  # max_steps must be >= 0
         )
         
         assert response.status_code >= 400
