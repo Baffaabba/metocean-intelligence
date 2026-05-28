@@ -18,27 +18,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 @pytest.fixture
 def test_db_engine():
     """Create function-scoped in-memory database engine for each test"""
+    from app.src.models import Base
+    
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     
-    # Import models and create all tables for this test
-    from app.src.models import Base
+    # Clear any lingering table definitions from previous tests
+    # This is critical for preventing "table already exists" errors
+    for table in list(Base.metadata.tables.values()):
+        Base.metadata.remove(table)
+    
+    # Create fresh tables for this test
     Base.metadata.create_all(bind=engine)
     
     yield engine
     
-    # Cleanup at end of test: drop all tables and dispose engine
+    # Cleanup at end of test: drop all tables from the database
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
-    
-    # Clear all tables from metadata to prevent index conflicts
-    # This is critical: removing tables ensures clean state for next test
-    for table in list(Base.metadata.tables.values()):
-        Base.metadata.remove(table)
-    
-    # Reset all indexes for clean state
-    for constraint in list(Base.metadata.constraints):
-        Base.metadata.constraints.discard(constraint)
 
 
 @pytest.fixture
