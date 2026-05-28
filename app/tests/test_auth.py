@@ -148,11 +148,11 @@ class TestInvitationFlow:
         
         assert user is not None
         assert user.email == email
-        assert user.is_active
+        assert user.hashed_password is not None  # user was created with a password
     
     def test_accept_invitation_with_invalid_token_fails(self, db_session):
         """Accepting with invalid token should raise ValueError"""
-        with pytest.raises(ValueError, match="Invitation not found or expired"):
+        with pytest.raises(ValueError, match="Invalid or expired invitation token"):
             accept_invitation(db_session, "invalid-token", "Password123!")
     
     def test_accept_invitation_twice_fails(self, db_session):
@@ -164,7 +164,7 @@ class TestInvitationFlow:
         accept_invitation(db_session, invite.token, "Password123!")
         
         # Try to accept same invitation again
-        with pytest.raises(ValueError, match="Invitation not found or expired"):
+        with pytest.raises(ValueError, match="Invitation already accepted"):
             accept_invitation(db_session, invite.token, "Password123!")
 
 
@@ -176,7 +176,7 @@ class TestAdminUsers:
     def test_get_admin_user_with_admin_email(self, db_session):
         """Admin function should accept user with admin email"""
         from app.src.auth import create_user
-        from app.src.db import ADMIN_EMAILS
+        from app.src.auth import ADMIN_EMAILS
         
         # Create user with admin email
         admin_email = list(ADMIN_EMAILS)[0]

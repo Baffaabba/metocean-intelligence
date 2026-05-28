@@ -7,8 +7,8 @@ import pytest
 from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
-import tempfile
 
 # Import from app
 import sys
@@ -54,6 +54,7 @@ def test_db_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
 
     Base.metadata.create_all(bind=engine)
@@ -172,10 +173,14 @@ def admin_client(test_client, test_admin_data, db_session):
     from app.src.auth import create_access_token, hash_password
     from app.src.models import User
 
-    # Create admin user directly in the test DB (create_user() has no is_admin param)
+    # The JWT token and the DB user MUST use the same email.
+    # Use a hardcoded admin email (in ADMIN_EMAILS) so the endpoint
+    # recognises this user as admin even without is_admin=True in the DB.
+    admin_email = "kamaluddeen.usman@utp.edu.my"
+
     try:
         admin = User(
-            email=test_admin_data["email"],
+            email=admin_email,
             hashed_password=hash_password(test_admin_data["password"]),
             is_admin=True,
         )
@@ -183,15 +188,9 @@ def admin_client(test_client, test_admin_data, db_session):
         db_session.commit()
     except Exception:
         db_session.rollback()  # user may already exist
-    
-    # Get admin token (use first admin email)
-    admin_email = "kamaluddeen.usman@utp.edu.my"  # Default admin from db.py
+
     token = create_access_token(admin_email)
-    
-    # Set auth header
-    test_client.headers = {
-        "Authorization": f"Bearer {token}"
-    }
+    test_client.headers = {"Authorization": f"Bearer {token}"}
     
     return test_client
 
