@@ -62,22 +62,34 @@ jobs:
           ssh -i ~/.ssh/metocean.pem \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} \
-            "cd /srv/metocean/app && tar -czf backup_\$(date +%s).tar.gz . --exclude=.git --exclude=__pycache__ 2>/dev/null; ls -lh backup_*.tar.gz | tail -1"
-      
+            "cd /srv/metocean/app && tar -czf backup_\$(date +%s).tar.gz . --exclude=.git --exclude=__pycache__ --exclude=.venv 2>/dev/null; ls -lh backup_*.tar.gz | tail -1"
+
       - name: "📤 Upload application files"
         run: |
+          # Upload the app/ folder itself (not its contents flattened) so the
+          # remote layout is /srv/metocean/app/app/{api.py,src,...} — this
+          # mirrors the repo root exactly, which api.py's "from app.src.x
+          # import" absolute imports require.
           echo "📤 Uploading app/ directory..."
           scp -i ~/.ssh/metocean.pem \
             -o StrictHostKeyChecking=no \
-            -r app/* \
+            -r app \
             ${{ secrets.VM_USER }}@${{ secrets.VM_IP }}:/srv/metocean/app/
-          
+
           echo "📤 Uploading configuration files..."
           scp -i ~/.ssh/metocean.pem \
             -o StrictHostKeyChecking=no \
             pyproject.toml uv.lock \
             ${{ secrets.VM_USER }}@${{ secrets.VM_IP }}:/srv/metocean/app/
-          
+
+          echo "📤 Syncing static files served directly by nginx..."
+          ssh -i ~/.ssh/metocean.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }} "mkdir -p /srv/metocean/static"
+          scp -i ~/.ssh/metocean.pem \
+            -o StrictHostKeyChecking=no \
+            -r app/static/* \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_IP }}:/srv/metocean/static/
+
           echo "✅ Files uploaded successfully"
       
       - name: "🔧 Update application on VM"
@@ -100,7 +112,7 @@ jobs:
           ./.venv/bin/python3 -c "from app.src.auth import authenticate_user; print('✅ Imports OK')" 2>&1 || echo "⚠️ Import check skipped"
           
           echo "✅ Application updated"
-        EOF
+          EOF
       
       - name: "🔄 Restart service"
         run: |

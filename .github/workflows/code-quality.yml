@@ -31,21 +31,6 @@ jobs:
       - name: "🔍 Check formatting with ruff"
         run: |
           uv run ruff check app/src app/tests --diff || true
-      
-      - name: "🎨 Check code style"
-        continue-on-error: true
-        run: |
-          uv run black --check app/src app/tests || echo "⚠️ Style issues (use 'black app/' to fix)"
-      
-      - name: "📋 Check import order"
-        continue-on-error: true
-        run: |
-          uv run isort --check-only app/src app/tests || echo "⚠️ Import issues (use 'isort app/' to fix)"
-      
-      - name: "🔎 Pylint analysis"
-        continue-on-error: true
-        run: |
-          uv run pylint app/src --exit-zero --disable=all --enable=E,F || true
 
   security:
     name: "🔒 Security Checks"

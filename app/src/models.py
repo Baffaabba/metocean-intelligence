@@ -16,6 +16,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -34,6 +35,10 @@ class UserInvite(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
     )
     accepted_at: Mapped[Optional[datetime]] = mapped_column(
@@ -71,6 +76,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -96,6 +105,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     is_admin: bool
+    is_active: bool
     created_at: datetime
 
 
@@ -104,6 +114,7 @@ class InviteListItem(BaseModel):
     email: EmailStr
     accepted: bool
     created_at: datetime
+    expires_at: datetime
     accepted_at: Optional[datetime]
 
 

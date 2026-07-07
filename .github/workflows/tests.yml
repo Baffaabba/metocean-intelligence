@@ -102,12 +102,21 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const coverage = Math.floor(Math.random() * 20) + 80; // Placeholder
+            let coverage = 'unknown';
+            try {
+              const xml = fs.readFileSync('coverage.xml', 'utf8');
+              const match = xml.match(/line-rate="([\d.]+)"/);
+              if (match) {
+                coverage = Math.round(parseFloat(match[1]) * 100) + '%';
+              }
+            } catch (err) {
+              coverage = 'unavailable (coverage.xml not found)';
+            }
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🧪 Test Results\n\n- ✅ Tests passed\n- 📊 Coverage: ${coverage}%\n- 🐍 Python: ${{ matrix.python-version }}`
+              body: `## 🧪 Test Results\n\n- Status: ${{ job.status }}\n- 📊 Coverage: ${coverage}\n- 🐍 Python: ${{ matrix.python-version }}`
             });
 
   type-check:

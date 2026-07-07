@@ -14,6 +14,11 @@ from fastapi.testclient import TestClient
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# auth.py now refuses to import without METOCEAN_JWT_SECRET set (no more
+# insecure "change-this-in-production" fallback). Set it here, before any
+# src.* import below, so test collection doesn't blow up.
+os.environ.setdefault("METOCEAN_JWT_SECRET", "test-secret-key-for-testing-only-not-for-prod")
+
 # ---------------------------------------------------------------------------
 # CRITICAL: Prevent duplicate module execution caused by mixed import paths.
 #
@@ -107,7 +112,7 @@ def test_admin_data():
 def mock_env(monkeypatch):
     """Mock environment variables for testing"""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-    monkeypatch.setenv("METOCEAN_JWT_SECRET_KEY", "test-secret-key-for-testing-only")
+    monkeypatch.setenv("METOCEAN_JWT_SECRET", "test-secret-key-for-testing-only-not-for-prod")
     monkeypatch.setenv("METOCEAN_JWT_EXPIRE_MINUTES", "60")
     # Mock AWS SES (optional - will skip if not configured)
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test-key")
@@ -138,6 +143,11 @@ def test_client(mock_env, test_db_engine):
     api_module.init_db = lambda: None
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Rate limiting is per-process/in-memory and keyed by client IP; reset it
+    # so earlier tests hitting /auth/login etc. don't trip the limit here.
+    if hasattr(api_module.limiter, "reset"):
+        api_module.limiter.reset()
 
     client = TestClient(app)
     yield client

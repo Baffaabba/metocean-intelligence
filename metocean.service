@@ -1,5 +1,10 @@
 # /etc/systemd/system/metocean.service
 # Systemd unit — runs MetOcean FastAPI app under uvicorn
+#
+# WorkingDirectory mirrors the repo root layout exactly (/srv/metocean/app
+# contains an "app/" package — api.py, src/, etc. — plus pyproject.toml,
+# uv.lock, and .env). This matches api.py's own "from app.src.x import"
+# absolute imports; see redeploy.sh for how files land in this shape.
 
 [Unit]
 Description=MetOcean Intelligence Platform (uvicorn)
@@ -14,10 +19,11 @@ WorkingDirectory=/srv/metocean/app
 
 # Load secrets and runtime paths
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=/srv/metocean/config/metocean.env
+EnvironmentFile=/srv/metocean/app/.env
 
-# Start command — uses the uv-managed virtualenv
-ExecStart=/srv/metocean/app/.venv/bin/uvicorn api:app \
+# Start command — uses the uv-managed virtualenv. Module path is app.api:app
+# (not api:app) because api.py lives at /srv/metocean/app/app/api.py.
+ExecStart=/srv/metocean/app/.venv/bin/uvicorn app.api:app \
     --host 127.0.0.1 \
     --port 8000 \
     --workers 2 \

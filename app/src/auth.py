@@ -13,9 +13,28 @@ from src.models import User, UserInvite
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-JWT_SECRET = os.getenv("METOCEAN_JWT_SECRET", "change-this-in-production")
+JWT_SECRET = os.getenv("METOCEAN_JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "METOCEAN_JWT_SECRET is not set. Refusing to start with an insecure "
+        "default. Generate one with: openssl rand -hex 32"
+    )
 JWT_ALGORITHM = os.getenv("METOCEAN_JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("METOCEAN_JWT_EXPIRE_MINUTES", "60"))
+
+INVITE_EXPIRE_DAYS = 7
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalize a datetime to tz-aware UTC.
+
+    SQLite (used in tests, and sometimes for quick local runs) doesn't
+    persist tzinfo even for DateTime(timezone=True) columns, so values read
+    back from the DB can be naive. Treat naive datetimes as UTC.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 # Hardcoded admin emails
 ADMIN_EMAILS = {
@@ -62,6 +81,8 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         return None
     if not verify_password(password, user.hashed_password):
         return None
+    if not user.is_active:
+        return None
     return user
 
 
@@ -96,6 +117,11 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deactivated",
+        )
     return user
 
 
@@ -120,9 +146,10 @@ def create_invite_token() -> str:
 
 
 def create_invitation(db: Session, email: str) -> UserInvite:
-    """Create a new invitation for a user."""
+    """Create a new invitation for a user, valid for INVITE_EXPIRE_DAYS."""
     token = create_invite_token()
-    invite = UserInvite(email=email, token=token)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRE_DAYS)
+    invite = UserInvite(email=email, token=token, expires_at=expires_at)
     db.add(invite)
     db.commit()
     db.refresh(invite)
@@ -139,10 +166,13 @@ def accept_invitation(db: Session, token: str, password: str) -> User:
     invite = get_invitation_by_token(db, token)
     if not invite:
         raise ValueError("Invalid or expired invitation token")
-    
+
     if invite.accepted:
         raise ValueError("Invitation already accepted")
-    
+
+    if datetime.now(timezone.utc) > _as_utc(invite.expires_at):
+        raise ValueError("Invitation has expired. Ask an admin to resend it.")
+
     # Create the user
     user = create_user(db, invite.email, password)
     
@@ -171,11 +201,12 @@ def get_pending_invites(db: Session) -> list:
 
 
 def deactivate_user(db: Session, user_id: int) -> Optional[User]:
-    """Deactivate a user by marking them as not admin (placeholder for deletion logic)."""
+    """Deactivate a user, blocking further login and invalidating admin status."""
     user = db.query(User).filter(User.id == user_id).first()
     if user and user.email not in ADMIN_EMAILS:
         # Prevent deactivating hardcoded admins
         user.is_admin = False
+        user.is_active = False
         db.commit()
         db.refresh(user)
     return user
@@ -215,7 +246,7 @@ def get_password_reset_by_token(db: Session, token: str) -> Optional[object]:
         return None
     
     # Check if token has expired
-    if datetime.now(timezone.utc) > reset.expires_at:
+    if datetime.now(timezone.utc) > _as_utc(reset.expires_at):
         return None
     
     return reset

@@ -17,6 +17,9 @@ import plotly.graph_objects as go
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.src.auth import (
     create_access_token,
@@ -33,6 +36,7 @@ from app.src.db import init_db, get_db
 from app.src.models import (
     AuthMessage,
     LoginRequest,
+    ForgotPasswordRequest,
     SignupRequest,
     TokenResponse,
     User,
@@ -107,6 +111,8 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "false").lower() == "true"
+
 app = FastAPI(
     title="MetOcean Intelligence Platform",
     description=(
@@ -115,14 +121,35 @@ app = FastAPI(
     ),
     version="2.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
 )
+
+# Comma-separated list of allowed origins, e.g.
+# "https://metoceanai.com,http://metoceanai.com". No wildcard in production —
+# this is a private, invite-only site.
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Tighten to your domain in production
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Rate limiting (in-memory, single-instance — fine for the current
+# single-VM deployment; move to a Redis backend if you ever scale out) ────────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Request Logging Middleware ────────────────────────────────────────────────
 @app.middleware("http")
@@ -153,7 +180,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Auth Endpoints ─────────────────────────────────────────────────────────────
 @app.post("/auth/login", response_model=TokenResponse, summary="Sign in and get JWT")
-async def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, str(payload.email), payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -167,7 +195,8 @@ async def verify(current_user: User = Depends(get_current_user)):
 
 
 @app.post("/auth/forgot-password", response_model=AuthMessage, summary="Request password reset email")
-async def forgot_password(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Send password reset email to user (public endpoint)."""
     from app.src.auth import create_password_reset_token
     from app.src.email import send_password_reset_email
@@ -188,7 +217,8 @@ async def forgot_password(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/reset-password/{token}", response_model=AuthMessage, summary="Reset password with token")
-async def reset_password(token: str, payload: AcceptInviteRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def reset_password(request: Request, token: str, payload: AcceptInviteRequest, db: Session = Depends(get_db)):
     """Reset password using a valid reset token."""
     from app.src.auth import use_password_reset_token
     
@@ -201,7 +231,9 @@ async def reset_password(token: str, payload: AcceptInviteRequest, db: Session =
 
 # ── Admin Endpoints ────────────────────────────────────────────────────────────
 @app.post("/admin/invite", response_model=InviteResponse, summary="Send invitation email to new user (admin only)")
+@limiter.limit("20/minute")
 async def invite_user(
+    request: Request,
     payload: InviteRequest,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
@@ -222,7 +254,8 @@ async def invite_user(
 
 
 @app.post("/auth/accept-invite/{token}", response_model=AuthMessage, summary="Accept invitation and set password")
-async def accept_invite(token: str, payload: AcceptInviteRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def accept_invite(request: Request, token: str, payload: AcceptInviteRequest, db: Session = Depends(get_db)):
     """User accepts invitation and creates account with password."""
     try:
         user = accept_invitation(db, token, payload.password)
@@ -243,6 +276,7 @@ async def list_users(
             id=u.id,
             email=u.email,
             is_admin=u.is_admin,
+            is_active=u.is_active,
             created_at=u.created_at,
         )
         for u in users
@@ -262,6 +296,7 @@ async def list_invites(
             email=i.email,
             accepted=i.accepted,
             created_at=i.created_at,
+            expires_at=i.expires_at,
             accepted_at=i.accepted_at,
         )
         for i in invites
@@ -278,10 +313,16 @@ async def resend_invite(
     invite = db.query(UserInvite).filter(UserInvite.id == invite_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Invitation not found.")
-    
+
     if invite.accepted:
         raise HTTPException(status_code=400, detail="Invitation already accepted.")
-    
+
+    from datetime import datetime, timedelta, timezone
+    from app.src.auth import INVITE_EXPIRE_DAYS
+    invite.expires_at = datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRE_DAYS)
+    db.commit()
+    db.refresh(invite)
+
     email_sent = send_invite_email(invite.email, invite.token)
     if not email_sent:
         raise HTTPException(status_code=500, detail="Failed to send email.")

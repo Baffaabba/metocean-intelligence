@@ -41,20 +41,17 @@ class TestHealthEndpoint:
 class TestOpenAPIDocumentation:
     """Test OpenAPI documentation endpoints"""
     
-    def test_openapi_schema_available(self, test_client):
-        """GET /openapi.json should return OpenAPI schema"""
+    def test_openapi_schema_disabled_by_default(self, test_client):
+        """GET /openapi.json is disabled unless ENABLE_API_DOCS=true (private, invite-only site)."""
         response = test_client.get("/openapi.json")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "openapi" in data or "swagger" in data
-    
-    def test_swagger_docs_available(self, test_client):
-        """GET /docs should return Swagger UI"""
+
+        assert response.status_code == 404
+
+    def test_swagger_docs_disabled_by_default(self, test_client):
+        """GET /docs is disabled unless ENABLE_API_DOCS=true (private, invite-only site)."""
         response = test_client.get("/docs")
-        
-        assert response.status_code == 200
-        assert "html" in response.text.lower() or "swagger" in response.text.lower()
+
+        assert response.status_code == 404
 
 
 @pytest.mark.api
