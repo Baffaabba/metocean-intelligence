@@ -108,15 +108,10 @@ log_success "Python $PYTHON_VERSION installed"
 # STEP 6: Install Python Dependencies
 # ═══════════════════════════════════════════════════════════════════════════
 log_info "Step 6: Installing Python dependencies (this may take 5+ minutes)..."
+# torch resolves to the CPU-only wheel automatically via [tool.uv.sources]
+# in pyproject.toml — no separate install step needed.
 uv sync --python "python$PYTHON_VERSION" 2>&1 | tail -20
 log_success "Python dependencies installed"
-
-# ═══════════════════════════════════════════════════════════════════════════
-# STEP 7: Install PyTorch (CPU)
-# ═══════════════════════════════════════════════════════════════════════════
-log_info "Step 7: Installing PyTorch (CPU version)..."
-uv pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu 2>&1 | tail -10
-log_success "PyTorch installed"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 8: Create .env File
