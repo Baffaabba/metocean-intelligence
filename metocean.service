@@ -19,14 +19,24 @@ WorkingDirectory=/srv/metocean/app
 
 # Load secrets and runtime paths
 Environment=PYTHONUNBUFFERED=1
+# PrivateTmp=true gives this service its own isolated /tmp; point matplotlib
+# there explicitly instead of it falling back with a permission-denied
+# warning (the metocean system user has no home directory).
+Environment=MPLCONFIGDIR=/tmp/matplotlib
 EnvironmentFile=/srv/metocean/app/.env
 
 # Start command — uses the uv-managed virtualenv. Module path is app.api:app
 # (not api:app) because api.py lives at /srv/metocean/app/app/api.py.
+#
+# --workers 1: each worker loads its own full copy of the ML models, and on
+# small instances (e.g. a 1GB-RAM t3.micro) two workers means loading
+# everything twice — that's most of the available memory gone at idle,
+# before a single real request arrives. Bump this only once the instance
+# has enough headroom to justify it (check `free -h` under real load first).
 ExecStart=/srv/metocean/app/.venv/bin/uvicorn app.api:app \
     --host 127.0.0.1 \
     --port 8000 \
-    --workers 2 \
+    --workers 1 \
     --log-level info \
     --access-log \
     --timeout-keep-alive 75
