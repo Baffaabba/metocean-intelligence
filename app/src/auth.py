@@ -8,8 +8,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from src.db import get_db
-from src.models import User, UserInvite
+from app.src.db import get_db
+from app.src.models import User, UserInvite
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -216,7 +216,7 @@ def deactivate_user(db: Session, user_id: int) -> Optional[User]:
 
 def create_password_reset_token(db: Session, email: str) -> str:
     """Generate a secure password reset token and save to database."""
-    from src.models import PasswordReset
+    from app.src.models import PasswordReset
     
     user = get_user_by_email(db, email)
     if not user:
@@ -239,7 +239,7 @@ def create_password_reset_token(db: Session, email: str) -> str:
 
 def get_password_reset_by_token(db: Session, token: str) -> Optional[object]:
     """Retrieve a password reset token if valid and not expired."""
-    from src.models import PasswordReset
+    from app.src.models import PasswordReset
     
     reset = db.query(PasswordReset).filter(PasswordReset.token == token).first()
     if not reset:
@@ -254,7 +254,7 @@ def get_password_reset_by_token(db: Session, token: str) -> Optional[object]:
 
 def use_password_reset_token(db: Session, token: str, new_password: str) -> User:
     """Use a password reset token to update user password and invalidate token."""
-    from src.models import PasswordReset
+    from app.src.models import PasswordReset
     
     reset = get_password_reset_by_token(db, token)
     if not reset:

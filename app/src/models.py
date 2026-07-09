@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.db import Base
+from app.src.db import Base
 
 
 class User(Base):

@@ -36,8 +36,8 @@ def get_db():
 
 def init_db() -> None:
     # Import here to avoid circular imports between models and Base.
-    from src.models import User, PasswordReset  # noqa: F401
-    from src.auth import ADMIN_EMAILS, hash_password
+    from app.src.models import User, PasswordReset  # noqa: F401
+    from app.src.auth import ADMIN_EMAILS, hash_password
 
     Base.metadata.create_all(bind=engine)
     

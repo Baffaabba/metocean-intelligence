@@ -10,51 +10,21 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-# Import from app
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # auth.py now refuses to import without METOCEAN_JWT_SECRET set (no more
 # insecure "change-this-in-production" fallback). Set it here, before any
-# src.* import below, so test collection doesn't blow up.
+# app.src.* import below, so test collection doesn't blow up.
 os.environ.setdefault("METOCEAN_JWT_SECRET", "test-secret-key-for-testing-only-not-for-prod")
 
-# ---------------------------------------------------------------------------
-# CRITICAL: Prevent duplicate module execution caused by mixed import paths.
-#
-# Source files in app/src/ use:  "from src.xxx import yyy"   (via app/ in path)
-# api.py uses:                   "from app.src.xxx import yyy" (from repo root)
-#
-# When Python sees both paths pointing to the same .py file, it executes
-# models.py TWICE — once as "src.models" and once as "app.src.models".
-# The second execution runs "class User(Base)" again with extend_existing=True,
-# which APPENDS duplicate Index objects to Base.metadata.  When create_all()
-# runs it then issues CREATE INDEX twice on the same empty database, which
-# SQLite rejects with "index already exists".
-#
-# Fix: after loading the src.* modules the normal way, alias them under the
-# app.src.* names so Python returns the cached objects instead of re-running
-# the module file.
-# ---------------------------------------------------------------------------
-import src.db       # noqa: F401 – populates sys.modules['src.db']
-import src.models   # noqa: F401 – populates sys.modules['src.models']
-import src.auth     # noqa: F401 – populates sys.modules['src.auth']
-
-sys.modules.setdefault('app.src.db',     sys.modules['src.db'])
-sys.modules.setdefault('app.src.models', sys.modules['src.models'])
-sys.modules.setdefault('app.src.auth',   sys.modules['src.auth'])
+# All internal app/src/*.py modules import each other via "app.src.x", the
+# same style api.py itself uses — so this is the only import path that ever
+# gets exercised, matching exactly how uvicorn app.api:app runs in
+# production. pytest.ini's `pythonpath = .` puts the repo root on sys.path.
 
 
 @pytest.fixture
 def test_db_engine():
-    """Create function-scoped in-memory SQLite database for each test.
-
-    Module aliasing at the top of this file ensures models.py is executed
-    only once, so Base.metadata contains exactly one Index object per index
-    (no duplicates).  Each call to this fixture creates a fresh :memory:
-    engine, so tables/indexes are always created on a completely empty DB.
-    """
-    from src.db import Base
+    """Create function-scoped in-memory SQLite database for each test."""
+    from app.src.db import Base
 
     engine = create_engine(
         "sqlite:///:memory:",
@@ -125,7 +95,6 @@ def test_client(mock_env, test_db_engine):
     """Create TestClient for API testing"""
     import app.api as api_module
     from app.api import app, get_db
-    from src.db import Base
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
 
