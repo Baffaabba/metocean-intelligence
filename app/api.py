@@ -47,7 +47,6 @@ from app.src.models import (
     AcceptInviteRequest,
     UserInvite,
 )
-from app.src.email import send_invite_email
 from sqlalchemy.orm import Session
 
 # ── Logging Setup ──────────────────────────────────────────────────────────────
@@ -230,7 +229,7 @@ async def reset_password(request: Request, token: str, payload: AcceptInviteRequ
 
 
 # ── Admin Endpoints ────────────────────────────────────────────────────────────
-@app.post("/admin/invite", response_model=InviteResponse, summary="Send invitation email to new user (admin only)")
+@app.post("/admin/invite", response_model=InviteResponse, summary="Create invitation for new user (admin only)")
 @limiter.limit("20/minute")
 async def invite_user(
     request: Request,
@@ -238,14 +237,11 @@ async def invite_user(
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    """Admin sends invitation email to new user."""
+    """Admin creates an invitation; the invite link/token must be shared manually (e.g. via mailto:)."""
     try:
         invite = create_invitation(db, str(payload.email))
-        email_sent = send_invite_email(str(payload.email), invite.token)
-        if not email_sent:
-            logger.warning(f"Invitation created but email failed for {payload.email}")
         return InviteResponse(
-            message="Invitation sent successfully.",
+            message="Invitation created successfully.",
             email=payload.email,
             token=invite.token,
         )
@@ -298,18 +294,19 @@ async def list_invites(
             created_at=i.created_at,
             expires_at=i.expires_at,
             accepted_at=i.accepted_at,
+            token=i.token,
         )
         for i in invites
     ]
 
 
-@app.post("/admin/invites/{invite_id}/resend", response_model=InviteResponse, summary="Resend invitation email (admin only)")
-async def resend_invite(
+@app.post("/admin/invites/{invite_id}/resend", response_model=InviteResponse, summary="Regenerate invitation link (admin only)")
+async def regenerate_invite(
     invite_id: int,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
-    """Admin resends invitation email."""
+    """Admin regenerates/extends an invitation's expiry; the link must be shared manually."""
     invite = db.query(UserInvite).filter(UserInvite.id == invite_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Invitation not found.")
@@ -323,12 +320,8 @@ async def resend_invite(
     db.commit()
     db.refresh(invite)
 
-    email_sent = send_invite_email(invite.email, invite.token)
-    if not email_sent:
-        raise HTTPException(status_code=500, detail="Failed to send email.")
-    
     return InviteResponse(
-        message="Invitation email resent successfully.",
+        message="Invitation link regenerated successfully.",
         email=invite.email,
         token=invite.token,
     )

@@ -116,6 +116,7 @@ class InviteListItem(BaseModel):
     created_at: datetime
     expires_at: datetime
     accepted_at: Optional[datetime]
+    token: str
 
 
 class AcceptInviteRequest(BaseModel):

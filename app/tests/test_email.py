@@ -87,7 +87,10 @@ class TestEmailErrorHandling:
 class TestEmailAPIIntegration:
     """Test email sending through API endpoints."""
 
-    def test_admin_invite_endpoint_sends_email(self, admin_client, monkeypatch, mock_smtp):
+    def test_admin_invite_endpoint_creates_invite_without_sending_email(self, admin_client, monkeypatch, mock_smtp):
+        """POST /admin/invite creates the invite and returns its token — no
+        email is sent automatically (the admin sends it manually via
+        mailto:, since automatic SMTP delivery isn't configured yet)."""
         _smtp_env(monkeypatch)
         response = admin_client.post(
             "/admin/invite",
@@ -95,7 +98,9 @@ class TestEmailAPIIntegration:
         )
 
         assert response.status_code == 200
-        mock_smtp.send_message.assert_called_once()
+        data = response.json()
+        assert "token" in data and data["token"]
+        mock_smtp.send_message.assert_not_called()
 
     def test_admin_invite_endpoint_without_email_fails(self, admin_client):
         response = admin_client.post(
