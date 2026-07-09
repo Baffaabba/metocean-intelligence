@@ -126,9 +126,13 @@ class TestForecastEndpointValidation:
             }
         )
         
-        # Should be 200, 400, or 500 depending on URL availability
-        # Not 422 (validation error)
-        assert response.status_code in [200, 400, 500]
+        # Should be 200, 400, or 500 depending on URL availability. Not 422
+        # (validation error) — all fields are optional/defaulted on this
+        # endpoint. 503 is also legitimate: process_forecast() intentionally
+        # returns it when ML_AVAILABLE is False (torch/neuralforecast not
+        # installed), which is the case in lightweight test/CI environments
+        # that skip the heavy ML dependency group.
+        assert response.status_code in [200, 400, 500, 503]
 
 
 @pytest.mark.forecast

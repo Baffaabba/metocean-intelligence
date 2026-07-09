@@ -184,8 +184,13 @@ class TestForecastEndpoint:
             }
         )
         
-        # Should return 200 or error depending on dataset availability
-        assert response.status_code in [200, 400, 422, 500]
+        # Should return 200 or error depending on dataset availability. 503 is
+        # also legitimate here: process_forecast() intentionally returns it
+        # when ML_AVAILABLE is False (torch/neuralforecast not installed —
+        # the app is designed to run in "stub mode" without them), which is
+        # the case in lightweight test/CI environments that skip the heavy
+        # ML dependency group.
+        assert response.status_code in [200, 400, 422, 500, 503]
 
 
 @pytest.mark.api

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>UTP Metocean Forecasting</title>
+  <link rel="icon" type="image/png" href="/UTP-Full-removebg-preview.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -485,7 +486,7 @@
 
 <header>
   <div style="display:flex;align-items:center;gap:0.75rem;">
-    <img src="/assets/images/UTP-Full-removebg-preview.png" alt="UTP" style="height:32px;opacity:0.9;">
+    <img src="/UTP-Full-removebg-preview.png" alt="UTP" style="height:32px;opacity:0.9;">
     <div class="logo-block">
       <p class="logo"><span>MetOcean</span> Intelligence Platform</p>
       <p class="logo-sub">Integration of Metocean Data for Intelligent Operations</p>
@@ -962,7 +963,7 @@ function handleFile(file) {
 // ── CV slider: re-run forecast when changed ───────────────────────────────────
 document.getElementById('cvWindow').addEventListener('input', debounce(() => {
   const isForecastVisible = !document.getElementById('results-forecast').classList.contains('hidden');
-  const hasResults = document.getElementById('forecast-table-body').querySelector('tr:not(:has(*))')?.textContent.includes('Run a forecast') === false;
+  const hasResults = _forecastData && _forecastData.length > 0;
   if (!isForecasting && isForecastVisible && hasResults) {
     runForecast();
   }

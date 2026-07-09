@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>MetOcean Intelligence — Sign In</title>
+  <link rel="icon" type="image/png" href="/UTP-Full-removebg-preview.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
@@ -417,7 +418,7 @@
           const data = await res.json();
           localStorage.setItem(TOKEN_KEY, data.access_token);
           toast('Signed in successfully.', 'success');
-          setTimeout(() => { window.location.href = '/forecast.html'; }, 500);
+          setTimeout(() => { window.location.href = '/forecast'; }, 500);
         } catch (err) {
           toast('Network error — please try again.', 'error');
           console.error('Login error:', err);
@@ -435,13 +436,13 @@
 
     // ── Forgot password ────────────────────────────────────────────────────────
     document.querySelector('.forgot').addEventListener('click', function() {
-      window.location.href = '/forgot-password.html';
+      window.location.href = '/forgot-password';
     });
 
     document.querySelector('.forgot').addEventListener('keydown', function(e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        window.location.href = '/forgot-password.html';
+        window.location.href = '/forgot-password';
       }
     });
 
@@ -462,7 +463,7 @@
         const r = await fetch(apiUrl('/auth/verify'), {
           headers: { 'Authorization': 'Bearer ' + token }
         });
-        if (r.ok) window.location.href = '/forecast.html';
+        if (r.ok) window.location.href = '/forecast';
       } catch { /* ignore — stay on login page */ }
     })();
   </script>
